@@ -15,14 +15,14 @@ from app.core.enums import AirouterDecision, ClientStatus, ContentType, DialogMo
 from app.core.settings import Settings
 from app.db.session import SessionLocal
 from app.integrations.telegram import TelegramGateway
-from app.models import Client, Dialog, Lead, Message, Service, StaffMember
-from app.schemas.booking import BookingCreateRequest
+from app.models import Booking, Client, Dialog, Lead, Message, Service, StaffMember
+from app.schemas.booking import BookingCreateRequest, BookingRescheduleRequest
 from app.schemas.telegram import AIRouterOutput
 from app.services.ai_router import route_ai
 from app.services.audit import log_audit_event
 from app.services.crm import record_message
 from app.services.notifications import create_notification
-from app.services.scheduling import create_booking
+from app.services.scheduling import create_booking, reschedule_booking
 from app.services.topic_sync import mirror_to_topic
 
 
@@ -377,11 +377,97 @@ def _finalize_booking_reply(
     return ai_output
 
 
+def _finalize_reschedule_reply(
+    db: Session,
+    *,
+    dialog: Dialog,
+    client: Client,
+    ai_output: AIRouterOutput,
+) -> AIRouterOutput:
+    slot = _parse_selected_slot(ai_output.extracted_entities.get("selected_slot"))
+    booking_id = ai_output.extracted_entities.get("reschedule_booking_id") or (dialog.ai_state_json or {}).get("reschedule_booking_id")
+    service_id = ai_output.extracted_entities.get("selected_service_id") or (dialog.ai_state_json or {}).get("recent_service_id")
+
+    if slot is None or booking_id is None:
+        ai_output.reply.messages = ["Чтобы перенести запись без ошибки, напишите, пожалуйста, удобный день или выберите один из предложенных вариантов."]
+        ai_output.reply.split = False
+        ai_output.next_action = "request_new_slot"
+        ai_output.extracted_entities["state_patch"] = {
+            **(ai_output.extracted_entities.get("state_patch") or {}),
+            "last_ai_action": "request_new_slot",
+        }
+        return ai_output
+
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        ai_output.reply.messages = ["Не нашла текущую запись для переноса. Подскажите, пожалуйста, на какую услугу Вы хотите записаться, и я помогу заново."]
+        ai_output.reply.split = False
+        ai_output.next_action = "clarify_service"
+        return ai_output
+
+    staff = db.get(StaffMember, slot["staff_id"]) if slot.get("staff_id") else None
+    service = db.get(Service, service_id or booking.service_id)
+
+    try:
+        updated = reschedule_booking(
+            db,
+            booking.id,
+            BookingRescheduleRequest(
+                start_at=slot["start_at"],
+                actor="client",
+            ),
+        )
+    except ValueError:
+        ai_output.reply.messages = [
+            "Пока оформляла перенос, это окно уже заняли. Могу сразу подобрать ещё 2-3 новых варианта — напишите удобный день или время."
+        ]
+        ai_output.reply.split = False
+        ai_output.next_action = "request_new_slot"
+        ai_output.extracted_entities["state_patch"] = {
+            **(ai_output.extracted_entities.get("state_patch") or {}),
+            "offered_slots": [],
+            "last_ai_action": "request_new_slot",
+        }
+        return ai_output
+
+    ai_output.reply.messages = [
+        (
+            '<tg-emoji emoji-id="5870633910337015697">✅</tg-emoji> '
+            f"Перенос оформила: {service.name if service else 'запись'}, {_format_slot_label(updated.start_at, staff)}."
+        ),
+        "Если захотите, могу ещё подсказать, как подготовиться к визиту или помочь с другой услугой.",
+    ]
+    ai_output.reply.split = True
+    ai_output.next_action = "booking_rescheduled"
+    ai_output.extracted_entities["state_patch"] = {
+        **(ai_output.extracted_entities.get("state_patch") or {}),
+        "selected_service_id": None,
+        "recent_service_id": service.id if service else booking.service_id,
+        "offered_slots": [],
+        "last_ai_action": "booking_rescheduled",
+        "pending_followup": "visit_prep",
+        "booked_booking_id": updated.id,
+        "booked_start_at": updated.start_at.isoformat(),
+        "reschedule_booking_id": None,
+    }
+    ai_output.extracted_entities["status_patch"] = {
+        "dialog_status": DialogStatus.BOOKED.value,
+        "client_status": ClientStatus.BOOKED.value,
+        "lead_stage": LeadStage.BOOKED.value,
+        "lead_service_id": service.id if service else booking.service_id,
+    }
+    return ai_output
+
+
 def _apply_ai_output(db: Session, dialog: Dialog, client: Client, ai_output: AIRouterOutput) -> AIRouterOutput:
     _merge_ai_state(dialog, ai_output.extracted_entities.get("state_patch"))
     _apply_status_patch(db, dialog, client, ai_output.extracted_entities.get("status_patch"))
     if ai_output.next_action == "book_slot":
         ai_output = _finalize_booking_reply(db, dialog=dialog, client=client, ai_output=ai_output)
+        _merge_ai_state(dialog, ai_output.extracted_entities.get("state_patch"))
+        _apply_status_patch(db, dialog, client, ai_output.extracted_entities.get("status_patch"))
+    if ai_output.next_action == "reschedule_slot":
+        ai_output = _finalize_reschedule_reply(db, dialog=dialog, client=client, ai_output=ai_output)
         _merge_ai_state(dialog, ai_output.extracted_entities.get("state_patch"))
         _apply_status_patch(db, dialog, client, ai_output.extracted_entities.get("status_patch"))
     return ai_output

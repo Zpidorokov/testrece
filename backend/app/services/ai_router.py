@@ -14,7 +14,7 @@ from app.core.enums import AirouterDecision, ClientStatus, ContentType, DialogMo
 from app.core.settings import Settings
 from app.integrations.openrouter import OpenRouterAdapter, build_fallback_output
 from app.models import Branch, Client, Dialog, KnowledgeItem, Service, StaffMember
-from app.schemas.telegram import AIRouterInput, AIRouterOutput
+from app.schemas.telegram import AIRouterInput, AIRouterOutput, AIRouterReply
 from app.services.scheduling import list_slots
 
 
@@ -51,6 +51,9 @@ BOOKING_KEYWORDS = ["запис", "окно", "slot", "appointment", "давай
 PRICE_KEYWORDS = ["цена", "стоим", "сколько", "прайс"]
 SERVICE_KEYWORDS = ["услуг", "маник", "педик", "бров", "ресниц", "ламин", "стриж", "уклад", "окраш", "airtouch"]
 PREPARATION_KEYWORDS = ["подготов", "подготовиться", "к визиту", "перед визитом", "до визита", "что взять", "как готовиться"]
+IDENTITY_KEYWORDS = ["вы кто", "кто вы", "кто ты", "кто это", "представьтесь", "с кем я говорю", "что вы за бот"]
+CAPABILITIES_KEYWORDS = ["что еще", "что ещё", "чем еще", "чем ещё", "что умеете", "чем можете помочь", "что можете"]
+LOCATION_KEYWORDS = ["где вы", "где находитесь", "адрес", "как вас найти", "режим работы", "график работы", "до скольки", "во сколько"]
 GENERAL_SERVICE_PATTERNS = [
     "какие услуги",
     "какие есть",
@@ -167,6 +170,12 @@ def _detect_intent(text: str) -> str:
         return "complaint"
     if any(keyword in lower for keyword in TONE_COMPLAINT_PATTERNS):
         return "tone_repair"
+    if any(keyword in lower for keyword in IDENTITY_KEYWORDS):
+        return "identity"
+    if any(keyword in lower for keyword in CAPABILITIES_KEYWORDS):
+        return "capabilities"
+    if any(keyword in lower for keyword in LOCATION_KEYWORDS):
+        return "location"
     if "перенес" in lower:
         return "reschedule"
     if "отмен" in lower:
@@ -356,6 +365,35 @@ def _has_active_service_context(dialog: Dialog, state: dict) -> bool:
     }
 
 
+def _should_continue_service_context(text: str, intent: str, state: dict) -> bool:
+    if intent in {"booking", "price", "visit_prep", "reschedule", "cancel"}:
+        return True
+    if _is_affirmative(text) or _is_negative(text):
+        return True
+    if _extract_requested_period(text) is not None or _extract_explicit_time(text) is not None:
+        return True
+    if _extract_requested_day(text, datetime.now()) is not None:
+        return True
+    if state.get("offered_slots") and _select_offered_slot(text, state.get("offered_slots", [])):
+        return True
+    lower = text.lower()
+    follow_up_markers = [
+        "что входит",
+        "сколько длится",
+        "сколько по времени",
+        "это сколько",
+        "по этой услуге",
+        "по ней",
+        "по этой",
+        "а по цене",
+    ]
+    return any(marker in lower for marker in follow_up_markers)
+
+
+def _load_primary_branch(db: Session) -> Optional[Branch]:
+    return db.scalar(select(Branch).where(Branch.is_active.is_(True)).order_by(Branch.id.asc()).limit(1))
+
+
 def _service_groups(services: list[Service]) -> list[str]:
     names = " ".join(service.name.lower() for service in services)
     groups: list[str] = []
@@ -410,6 +448,34 @@ def _preparation_message(service: Optional[Service]) -> str:
     return (
         f"{_emoji('pencil')} Перед визитом достаточно прийти чуть заранее и заранее написать, если есть чувствительность, аллергии или важные пожелания по результату."
     )
+
+
+def _identity_message(branch: Optional[Branch]) -> str:
+    branch_name = branch.name if branch else "салона"
+    return (
+        f"{_emoji('smile')} Я онлайн-ассистент {branch_name}. "
+        "Помогаю по услугам, стоимости, подбору окна, записи и переносу."
+    )
+
+
+def _capabilities_message(branch: Optional[Branch]) -> str:
+    branch_name = branch.name if branch else "салону"
+    return (
+        f"{_emoji('smile')} По {branch_name} могу быстро подсказать услуги и цены, помочь выбрать подходящий вариант, "
+        "предложить свободные окна, оформить запись или перенос."
+    )
+
+
+def _location_message(branch: Optional[Branch], knowledge_items: List[KnowledgeItem]) -> str:
+    if branch:
+        return (
+            f"{_emoji('smile')} Мы находимся по адресу: {branch.address}. "
+            "Если хотите, после этого сразу помогу подобрать услугу или ближайшее время."
+        )
+    facts = _knowledge_facts(knowledge_items)
+    if facts:
+        return f"{_emoji('smile')} {facts[0]}"
+    return f"{_emoji('smile')} Подскажу адрес и график. Напишите, пожалуйста, что именно удобнее уточнить."
 
 
 def _service_summary(service: Service) -> str:
@@ -781,6 +847,93 @@ def _break_loop(previous_state: dict, services: list[Service]) -> AIRouterOutput
     )
 
 
+def _prompt_history(dialog: Dialog) -> list[dict[str, str]]:
+    history: list[dict[str, str]] = []
+    for message in dialog.messages[-10:]:
+        text = (message.text_content or "").strip()
+        if not text:
+            continue
+        history.append(
+            {
+                "role": "assistant" if message.direction == "out" else "client",
+                "text": text,
+            }
+        )
+    return history
+
+
+def _service_prompt_payload(service: Optional[Service]) -> Optional[dict]:
+    if not service:
+        return None
+    return {
+        "name": service.name,
+        "duration_min": service.duration_min,
+        "price": _format_price_band(service),
+        "description": (service.description or "").strip(),
+    }
+
+
+async def _polish_result_with_ai(
+    *,
+    settings: Settings,
+    dialog: Dialog,
+    message_text: str,
+    result: AIRouterOutput,
+    knowledge_items: List[KnowledgeItem],
+    branch: Optional[Branch],
+    selected_service: Optional[Service],
+    recent_service: Optional[Service],
+) -> AIRouterOutput:
+    if settings.openrouter_dry_run or not settings.openrouter_api_key:
+        return result
+    if result.should_escalate or not result.reply.messages:
+        return result
+
+    prompt = (
+        "Вы онлайн-администратор салона красоты в Telegram.\n"
+        "Ниже уже есть planner draft reply. Перепишите его так, будто отвечает живой администратор, а не скрипт.\n"
+        "Нельзя менять факты, цену, длительность, имена мастеров, даты, время слотов и смысл следующего действия.\n"
+        "Сначала ответьте по смыслу на актуальный вопрос клиента, затем мягко подведите к следующему шагу.\n"
+        "Пишите на Вы, дружелюбно, уверенно, без канцелярита. Допустимы 1-2 коротких абзаца или аккуратный список, если речь о слотах.\n"
+        "Иногда можно переносить мысль на новую строку, если так читается лучше.\n"
+        "Не ставьте запятую в конце сообщения.\n"
+        "Не копируйте knowledge facts дословно.\n"
+        f"Можно использовать максимум один премиум-эмодзи в формате tg-emoji: {_emoji('smile')} {_emoji('calendar')} {_emoji('check')} {_emoji('pencil')}. Обычные эмодзи использовать нельзя.\n"
+        f"Салон: {branch.name if branch else 'не указан'}; адрес: {branch.address if branch else 'не указан'}.\n"
+        f"Последняя выбранная услуга: {_service_prompt_payload(selected_service)}.\n"
+        f"Последняя подтверждённая услуга: {_service_prompt_payload(recent_service)}.\n"
+        f"История диалога: {_prompt_history(dialog)}.\n"
+        f"Текущее сообщение клиента: {message_text!r}.\n"
+        f"Planner intent: {result.intent}. Planner next_action: {result.next_action}.\n"
+        f"Knowledge facts: {_knowledge_facts(knowledge_items)}.\n"
+        f"Planner draft reply: {result.reply.model_dump()}.\n"
+        "Верните только JSON формата {\"split\": boolean, \"messages\": [string, ...]}."
+    )
+
+    adapter = OpenRouterAdapter(settings)
+    try:
+        rewritten = await adapter.generate_reply(prompt=prompt, fallback=result.reply)
+    except Exception:
+        return result
+
+    messages = [message.strip()[: settings.max_ai_message_len] for message in rewritten.messages if message.strip()]
+    if not messages:
+        return result
+
+    candidate = AIRouterOutput(
+        decision=result.decision,
+        intent=result.intent,
+        risk_level=result.risk_level,
+        should_escalate=result.should_escalate,
+        reply=AIRouterReply(split=rewritten.split and len(messages) > 1, messages=messages[:2]),
+        extracted_entities=result.extracted_entities,
+        next_action=result.next_action,
+    )
+    if _looks_like_knowledge_dump(candidate, knowledge_items):
+        return result
+    return candidate
+
+
 async def route_ai(
     db: Session,
     *,
@@ -806,13 +959,16 @@ async def route_ai(
     intent = _detect_intent(message_text)
     services = _load_active_services(db)
     staff_map = _load_staff_map(db)
+    branch = _load_primary_branch(db)
     knowledge_items = _simple_knowledge_search(db, message_text, intent)
     state_service = _current_service(state, services)
     recent_service = _recent_service(state, services) or state_service
     has_active_service_context = _has_active_service_context(dialog, state)
-    current_service = state_service if has_active_service_context else None
+    should_continue_service_context = has_active_service_context and _should_continue_service_context(message_text, intent, state)
+    current_service = state_service if should_continue_service_context else None
     matched_services = _match_services(message_text, services)
     selected_service = matched_services[0] if matched_services else current_service
+    used_openrouter_generation = False
 
     if _risk_level(message_text) == "high":
         return _reply(
@@ -867,6 +1023,27 @@ async def route_ai(
             state_patch={"last_ai_action": "visit_prep"},
         )
 
+    if state.get("last_ai_action") == "request_new_slot" and recent_service:
+        if (
+            intent == "reschedule"
+            or _is_affirmative(message_text)
+            or _extract_requested_day(message_text, datetime.now()) is not None
+            or _extract_requested_period(message_text) is not None
+            or _extract_explicit_time(message_text) is not None
+        ):
+            result = _offer_slots(
+                db,
+                client=client,
+                service=recent_service,
+                message_text=message_text,
+                state=state,
+                staff_map=staff_map,
+            )
+            state_patch = dict(result.extracted_entities.get("state_patch") or {})
+            state_patch["reschedule_booking_id"] = state.get("booked_booking_id")
+            result.extracted_entities["state_patch"] = state_patch
+            return result
+
     offered_slots = state.get("offered_slots", [])
     if offered_slots:
         if _is_negative(message_text):
@@ -888,15 +1065,17 @@ async def route_ai(
         if chosen_slot:
             slot = _parse_serialized_slot(chosen_slot)
             if slot:
+                next_action = "reschedule_slot" if state.get("reschedule_booking_id") else "book_slot"
                 return _reply(
                     intent="booking",
                     risk_level="low",
                     messages=[],
-                    next_action="book_slot",
-                    state_patch={"last_ai_action": "book_slot"},
+                    next_action=next_action,
+                    state_patch={"last_ai_action": next_action},
                     extracted={
                         "selected_slot": chosen_slot,
                         "selected_service_id": (selected_service.id if selected_service else state.get("selected_service_id")),
+                        "reschedule_booking_id": state.get("reschedule_booking_id"),
                     },
                 )
 
@@ -918,10 +1097,40 @@ async def route_ai(
             risk_level="medium",
             messages=["Помогу с переносом. Напишите, пожалуйста, какой день и время Вам удобнее, и я предложу ближайшие окна."],
             next_action="request_new_slot",
-            state_patch={"last_ai_action": "request_new_slot"},
+            state_patch={
+                "last_ai_action": "request_new_slot",
+                "reschedule_booking_id": state.get("booked_booking_id"),
+                "selected_service_id": recent_service.id if recent_service else state.get("selected_service_id"),
+                "recent_service_id": recent_service.id if recent_service else state.get("recent_service_id"),
+            },
         )
 
-    if intent == "service_info" and not matched_services and _is_catalog_question(message_text):
+    if intent == "identity":
+        result = _reply(
+            intent="identity",
+            risk_level="low",
+            messages=[f"{_identity_message(branch)} Если скажете, что хотите сделать, я сразу сориентирую по услуге и времени."],
+            next_action="await_question",
+            state_patch={"last_ai_action": "identity"},
+        )
+    elif intent == "capabilities":
+        result = _reply(
+            intent="capabilities",
+            risk_level="low",
+            messages=[f"{_capabilities_message(branch)} Если хотите, можем сразу перейти к конкретному запросу."],
+            next_action="await_question",
+            state_patch={"last_ai_action": "capabilities"},
+        )
+    elif intent == "location":
+        result = _reply(
+            intent="location",
+            risk_level="low",
+            messages=[_location_message(branch, knowledge_items)],
+            next_action="await_question",
+            state_patch={"last_ai_action": "location"},
+        )
+
+    elif intent == "service_info" and not matched_services and _is_catalog_question(message_text):
         return _reply(
             intent="service_info",
             risk_level="low",
@@ -930,7 +1139,7 @@ async def route_ai(
             state_patch={"last_ai_action": "list_services"},
         )
 
-    if selected_service:
+    elif selected_service:
         wants_slots = (
             intent in {"booking", "price"}
             or _is_affirmative(message_text)
@@ -981,7 +1190,7 @@ async def route_ai(
             dialog={
                 "id": dialog.id,
                 "mode": dialog.mode,
-                "history": [{"role": msg.sender_type, "text": msg.text_content or ""} for msg in dialog.messages[-8:]],
+                "history": _prompt_history(dialog),
                 "ai_state": state,
             },
             message={"text": message_text, "content_type": content_type},
@@ -990,7 +1199,7 @@ async def route_ai(
                 "medical_sensitive": True,
                 "formal_voice": True,
                 "address_user_as": "Вы",
-                "allow_custom_emoji_markup": False,
+                "allow_custom_emoji_markup": True,
                 "max_message_len": settings.max_ai_message_len,
             },
         )
@@ -1006,11 +1215,16 @@ async def route_ai(
             "You are a Russian-speaking salon receptionist inside Telegram.\n"
             "Return structured JSON only.\n"
             "Always address the user formally using 'Вы'. Never use slang, sarcasm, or rude mirroring.\n"
+            "Answer like a real salon administrator, not like a scripted bot.\n"
             "Knowledge facts are internal notes. Never quote them verbatim and never dump long paragraphs from them.\n"
             "First answer the user's actual question in a concise, helpful way. Then gently move to the next useful step.\n"
             "If the user asks about services, summarize categories or concise service facts instead of policies or address.\n"
+            "If the user asks who you are, explain that you are the online assistant of the salon and how you can help.\n"
+            "If the user asks what else you can do, answer directly.\n"
+            "If the user asks about rescheduling, answer directly and ask only for the next missing detail.\n"
             "Usually return one short message. Use two messages only if the second is a separate CTA.\n"
-            "Do not use plain emoji characters.\n"
+            f"Use no plain emoji characters. If helpful, you may use one premium tg-emoji like {_emoji('smile')} or {_emoji('calendar')}.\n"
+            f"Salon branch: {branch.name if branch else 'unknown'}; address: {branch.address if branch else 'unknown'}.\n"
             f"Input: {input_payload.model_dump_json(ensure_ascii=False)}\n"
             f"Service catalog: {service_catalog}\n"
             f"Knowledge facts: {knowledge_facts}"
@@ -1018,10 +1232,23 @@ async def route_ai(
         adapter = OpenRouterAdapter(settings)
         try:
             result = await adapter.generate(prompt=prompt, fallback=fallback)
+            used_openrouter_generation = True
         except Exception:
             result = fallback
         if _looks_like_knowledge_dump(result, knowledge_items):
             result = fallback
+
+    if not used_openrouter_generation:
+        result = await _polish_result_with_ai(
+            settings=settings,
+            dialog=dialog,
+            message_text=message_text,
+            result=result,
+            knowledge_items=knowledge_items,
+            branch=branch,
+            selected_service=selected_service,
+            recent_service=recent_service,
+        )
 
     if content_type == ContentType.PHOTO.value and result.risk_level == "high":
         result.decision = AirouterDecision.ESCALATE.value

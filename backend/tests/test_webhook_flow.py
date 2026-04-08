@@ -137,6 +137,47 @@ def test_service_question_with_swearing_still_returns_catalog(client):
         assert "буду общаться на вы" not in reply_text
 
 
+def test_identity_question_does_not_repeat_previous_service_context(client):
+    updates = [
+        {
+            "update_id": 5,
+            "business_message": {
+                "message_id": 14,
+                "business_connection_id": "bc-1",
+                "chat": {"id": 9005},
+                "from": {"id": 786, "first_name": "Вера", "username": "vera"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 6,
+            "business_message": {
+                "message_id": 15,
+                "business_connection_id": "bc-1",
+                "chat": {"id": 9005},
+                "from": {"id": 786, "first_name": "Вера", "username": "vera"},
+                "text": "Вы кто?",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 786))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+
+        assert outbound
+        last_reply = (outbound[-1].text_content or "").lower()
+        assert "онлайн-ассистент" in last_reply
+        assert "маникюр" not in last_reply
+
+
 def test_booking_flow_offers_slots_and_creates_booking(client):
     updates = [
         {
@@ -379,6 +420,88 @@ def test_preparation_question_still_uses_last_booked_service_after_context_reset
 
         assert "перед визитом" in last_reply or "масло" in last_reply or "крем" in last_reply
         assert "какая услуга" not in last_reply
+
+
+def test_reschedule_flow_offers_new_slots_and_updates_booking(client):
+    updates = [
+        {
+            "update_id": 49,
+            "business_message": {
+                "message_id": 49,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 50,
+            "business_message": {
+                "message_id": 50,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "давайте",
+            },
+        },
+        {
+            "update_id": 51,
+            "business_message": {
+                "message_id": 51,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "1",
+            },
+        },
+        {
+            "update_id": 52,
+            "business_message": {
+                "message_id": 52,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "а перенести как",
+            },
+        },
+        {
+            "update_id": 53,
+            "business_message": {
+                "message_id": 53,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "18 апреля в любое время",
+            },
+        },
+        {
+            "update_id": 54,
+            "business_message": {
+                "message_id": 54,
+                "business_connection_id": "bc-6",
+                "chat": {"id": 9270},
+                "from": {"id": 787, "first_name": "Катя", "username": "katya"},
+                "text": "1",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 787))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        booking = db.scalar(select(Booking).where(Booking.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+
+        assert booking is not None
+        assert booking.status == "rescheduled"
+        reply_text = "\n".join(filter(None, (message.text_content for message in outbound))).lower()
+        assert "перенос оформила" in reply_text
 
 
 def test_rude_client_message_does_not_break_tone(client):

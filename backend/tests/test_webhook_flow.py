@@ -191,6 +191,196 @@ def test_booking_flow_offers_slots_and_creates_booking(client):
         assert any("запись зафиксировала" in (message.text_content or "").lower() for message in outbound)
 
 
+def test_after_booking_affirmative_message_triggers_preparation_help(client):
+    updates = [
+        {
+            "update_id": 30,
+            "business_message": {
+                "message_id": 30,
+                "business_connection_id": "bc-3",
+                "chat": {"id": 9200},
+                "from": {"id": 783, "first_name": "Анна", "username": "anna2"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 31,
+            "business_message": {
+                "message_id": 31,
+                "business_connection_id": "bc-3",
+                "chat": {"id": 9200},
+                "from": {"id": 783, "first_name": "Анна", "username": "anna2"},
+                "text": "давайте",
+            },
+        },
+        {
+            "update_id": 32,
+            "business_message": {
+                "message_id": 32,
+                "business_connection_id": "bc-3",
+                "chat": {"id": 9200},
+                "from": {"id": 783, "first_name": "Анна", "username": "anna2"},
+                "text": "1",
+            },
+        },
+        {
+            "update_id": 33,
+            "business_message": {
+                "message_id": 33,
+                "business_connection_id": "bc-3",
+                "chat": {"id": 9200},
+                "from": {"id": 783, "first_name": "Анна", "username": "anna2"},
+                "text": "давайте",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 783))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+        last_reply = (outbound[-1].text_content or "").lower()
+
+        assert "масло" in last_reply or "крем" in last_reply or "перед визитом" in last_reply
+        assert "могу предложить" not in last_reply
+
+
+def test_after_booking_generic_new_booking_question_resets_service_context(client):
+    updates = [
+        {
+            "update_id": 34,
+            "business_message": {
+                "message_id": 34,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9250},
+                "from": {"id": 784, "first_name": "Оля", "username": "olya2"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 35,
+            "business_message": {
+                "message_id": 35,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9250},
+                "from": {"id": 784, "first_name": "Оля", "username": "olya2"},
+                "text": "давайте",
+            },
+        },
+        {
+            "update_id": 36,
+            "business_message": {
+                "message_id": 36,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9250},
+                "from": {"id": 784, "first_name": "Оля", "username": "olya2"},
+                "text": "1",
+            },
+        },
+        {
+            "update_id": 37,
+            "business_message": {
+                "message_id": 37,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9250},
+                "from": {"id": 784, "first_name": "Оля", "username": "olya2"},
+                "text": "Записаться то можно?",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 784))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+        last_reply = (outbound[-1].text_content or "").lower()
+
+        assert "что именно хотите сделать" in last_reply
+        assert "могу предложить" not in last_reply
+
+
+def test_preparation_question_still_uses_last_booked_service_after_context_reset(client):
+    updates = [
+        {
+            "update_id": 44,
+            "business_message": {
+                "message_id": 44,
+                "business_connection_id": "bc-5",
+                "chat": {"id": 9260},
+                "from": {"id": 785, "first_name": "Лена", "username": "lena2"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 45,
+            "business_message": {
+                "message_id": 45,
+                "business_connection_id": "bc-5",
+                "chat": {"id": 9260},
+                "from": {"id": 785, "first_name": "Лена", "username": "lena2"},
+                "text": "давайте",
+            },
+        },
+        {
+            "update_id": 46,
+            "business_message": {
+                "message_id": 46,
+                "business_connection_id": "bc-5",
+                "chat": {"id": 9260},
+                "from": {"id": 785, "first_name": "Лена", "username": "lena2"},
+                "text": "1",
+            },
+        },
+        {
+            "update_id": 47,
+            "business_message": {
+                "message_id": 47,
+                "business_connection_id": "bc-5",
+                "chat": {"id": 9260},
+                "from": {"id": 785, "first_name": "Лена", "username": "lena2"},
+                "text": "Записаться то можно?",
+            },
+        },
+        {
+            "update_id": 48,
+            "business_message": {
+                "message_id": 48,
+                "business_connection_id": "bc-5",
+                "chat": {"id": 9260},
+                "from": {"id": 785, "first_name": "Лена", "username": "lena2"},
+                "text": "А подготовиться то как?",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 785))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+        last_reply = (outbound[-1].text_content or "").lower()
+
+        assert "перед визитом" in last_reply or "масло" in last_reply or "крем" in last_reply
+        assert "какая услуга" not in last_reply
+
+
 def test_rude_client_message_does_not_break_tone(client):
     first = client.post(
         "/webhooks/telegram",

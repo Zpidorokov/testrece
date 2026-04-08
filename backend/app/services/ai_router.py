@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import random
 import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -49,6 +50,7 @@ TONE_COMPLAINT_PATTERNS = [
 BOOKING_KEYWORDS = ["запис", "окно", "slot", "appointment", "давайте", "подбер", "свободн", "давай", "запиши"]
 PRICE_KEYWORDS = ["цена", "стоим", "сколько", "прайс"]
 SERVICE_KEYWORDS = ["услуг", "маник", "педик", "бров", "ресниц", "ламин", "стриж", "уклад", "окраш", "airtouch"]
+PREPARATION_KEYWORDS = ["подготов", "подготовиться", "к визиту", "перед визитом", "до визита", "что взять", "как готовиться"]
 GENERAL_SERVICE_PATTERNS = [
     "какие услуги",
     "какие есть",
@@ -83,6 +85,36 @@ MONTH_NAMES = {
     10: "октября",
     11: "ноября",
     12: "декабря",
+}
+SERVICE_MATCH_STOPWORDS = {
+    "и",
+    "или",
+    "а",
+    "но",
+    "да",
+    "нет",
+    "то",
+    "это",
+    "как",
+    "что",
+    "какая",
+    "какие",
+    "какой",
+    "можно",
+    "нужно",
+    "надо",
+    "дайте",
+    "давай",
+    "давайте",
+    "записаться",
+    "записать",
+    "запишите",
+    "можете",
+    "хочу",
+    "хотел",
+    "хотела",
+    "можете",
+    "можете",
 }
 
 
@@ -139,6 +171,8 @@ def _detect_intent(text: str) -> str:
         return "reschedule"
     if "отмен" in lower:
         return "cancel"
+    if any(keyword in lower for keyword in PREPARATION_KEYWORDS):
+        return "visit_prep"
     if any(keyword in lower for keyword in BOOKING_KEYWORDS):
         return "booking"
     if any(keyword in lower for keyword in PRICE_KEYWORDS):
@@ -254,11 +288,26 @@ def _format_price_band(service: Service) -> str:
 
 
 def _match_services(text: str, services: Iterable[Service]) -> List[Service]:
-    words = set(_tokenize(text))
+    words = {
+        word
+        for word in _tokenize(text)
+        if len(word) >= 4 and word not in SERVICE_MATCH_STOPWORDS
+    }
     ranked: list[tuple[int, Service]] = []
     for service in services:
         haystack = f"{service.name} {service.description or ''}".lower()
-        score = sum(2 for word in words if word in haystack)
+        service_words = {
+            word
+            for word in _tokenize(haystack)
+            if len(word) >= 4 and word not in SERVICE_MATCH_STOPWORDS
+        }
+        score = 0
+        for word in words:
+            if word in service_words:
+                score += 4
+                continue
+            if any(word in service_word or service_word in word for service_word in service_words):
+                score += 2
         alias_boosts = {
             "маник": 5,
             "педик": 5,
@@ -286,6 +335,27 @@ def _current_service(state: dict, services: list[Service]) -> Optional[Service]:
     return next((service for service in services if service.id == service_id), None)
 
 
+def _recent_service(state: dict, services: list[Service]) -> Optional[Service]:
+    service_id = state.get("recent_service_id")
+    if not service_id:
+        return None
+    return next((service for service in services if service.id == service_id), None)
+
+
+def _has_active_service_context(dialog: Dialog, state: dict) -> bool:
+    if dialog.status == DialogStatus.BOOKED.value:
+        return False
+    if not state.get("selected_service_id"):
+        return False
+    return state.get("last_ai_action") in {
+        "service_selected",
+        "request_time_preference",
+        "offer_slots",
+        "request_new_slot",
+        "tone_repair",
+    }
+
+
 def _service_groups(services: list[Service]) -> list[str]:
     names = " ".join(service.name.lower() for service in services)
     groups: list[str] = []
@@ -306,6 +376,39 @@ def _catalog_message(services: list[Service]) -> str:
         "Сейчас можем помочь с такими направлениями:\n"
         f"{lines}\n\n"
         "Если скажете, что именно хочется сделать, я сразу подберу подходящую услугу и ближайшие окна."
+    )
+
+
+def _preparation_message(service: Optional[Service]) -> str:
+    if not service:
+        return (
+            f"{_emoji('pencil')} Чтобы визит прошёл спокойно, достаточно прийти за 5-10 минут, сохранить удобную одежду и заранее написать, "
+            "если есть аллергии, чувствительность кожи или важные пожелания."
+        )
+
+    name = service.name.lower()
+    if "маник" in name or "педик" in name:
+        return (
+            f"{_emoji('pencil')} Перед визитом лучше не наносить масло или плотный крем на руки и стопы прямо перед приходом. "
+            "Если есть старое покрытие, сколы или чувствительность после предыдущего снятия, просто предупредите мастера в начале."
+        )
+    if "бров" in name:
+        return (
+            f"{_emoji('pencil')} Перед оформлением бровей лучше 1-2 дня не использовать кислоты и агрессивные средства в зоне бровей. "
+            "И не корректируйте форму самостоятельно перед визитом, чтобы мастер увидел естественную линию."
+        )
+    if "ресниц" in name:
+        return (
+            f"{_emoji('pencil')} На ламинирование ресниц лучше приходить без макияжа глаз и без водостойкой туши. "
+            "Если есть чувствительность или аллергия на составы, напишите об этом заранее."
+        )
+    if "стриж" in name or "уклад" in name or "окраш" in name or "airtouch" in name:
+        return (
+            f"{_emoji('pencil')} На стрижку или консультацию по окрашиванию можно прийти с чистыми сухими волосами и, если удобно, показать 1-2 референса. "
+            "Если волосы недавно окрашивались дома или был сложный выход из тёмного, лучше сразу об этом написать."
+        )
+    return (
+        f"{_emoji('pencil')} Перед визитом достаточно прийти чуть заранее и заранее написать, если есть чувствительность, аллергии или важные пожелания по результату."
     )
 
 
@@ -490,7 +593,7 @@ def _select_offered_slot(text: str, offered_slots: list[dict]) -> Optional[dict]
             if abs(slot_value - target) <= 30:
                 return slot
     if _is_affirmative(text):
-        return offered_slots[0]
+        return random.choice(offered_slots)
     return None
 
 
@@ -633,8 +736,8 @@ def _continue_after_tone_repair(service: Optional[Service], state: dict) -> AIRo
     )
 
 
-def _unknown_flow(state: dict) -> AIRouterOutput:
-    if state.get("selected_service_id"):
+def _unknown_flow(state: dict, *, has_active_service_context: bool) -> AIRouterOutput:
+    if has_active_service_context and state.get("selected_service_id"):
         return _reply(
             intent="unknown",
             risk_level="low",
@@ -704,7 +807,10 @@ async def route_ai(
     services = _load_active_services(db)
     staff_map = _load_staff_map(db)
     knowledge_items = _simple_knowledge_search(db, message_text, intent)
-    current_service = _current_service(state, services)
+    state_service = _current_service(state, services)
+    recent_service = _recent_service(state, services) or state_service
+    has_active_service_context = _has_active_service_context(dialog, state)
+    current_service = state_service if has_active_service_context else None
     matched_services = _match_services(message_text, services)
     selected_service = matched_services[0] if matched_services else current_service
 
@@ -716,6 +822,49 @@ async def route_ai(
             next_action="handoff_to_human",
             should_escalate=True,
             state_patch={"last_ai_action": "handoff_to_human"},
+        )
+
+    if dialog.status == DialogStatus.BOOKED.value:
+        if intent == "visit_prep" or (state.get("pending_followup") == "visit_prep" and _is_affirmative(message_text)):
+            return _reply(
+                intent="visit_prep",
+                risk_level="low",
+                messages=[_preparation_message(recent_service)],
+                next_action="await_question",
+                state_patch={
+                    "last_ai_action": "visit_prep",
+                    "pending_followup": None,
+                },
+            )
+        if intent == "booking" and not matched_services:
+            return _reply(
+                intent="booking",
+                risk_level="low",
+                messages=[
+                    "Да, конечно. Могу помочь и с новой записью. Подскажите, пожалуйста, что именно хотите сделать: маникюр, педикюр, брови, ресницы или стрижку."
+                ],
+                next_action="clarify_service",
+                state_patch={
+                    "selected_service_id": None,
+                    "requested_day_text": None,
+                    "requested_period": None,
+                    "offered_slots": [],
+                    "last_ai_action": "clarify_service",
+                    "pending_followup": None,
+                },
+                status_patch={
+                    "dialog_status": DialogStatus.ACTIVE.value,
+                    "client_status": ClientStatus.INTERESTED.value,
+                },
+            )
+
+    if intent == "visit_prep" and state.get("booked_booking_id") and recent_service:
+        return _reply(
+            intent="visit_prep",
+            risk_level="low",
+            messages=[_preparation_message(recent_service)],
+            next_action="await_question",
+            state_patch={"last_ai_action": "visit_prep"},
         )
 
     offered_slots = state.get("offered_slots", [])
@@ -825,7 +974,7 @@ async def route_ai(
             state_patch={"last_ai_action": "await_question"},
         )
     else:
-        fallback = _unknown_flow(state)
+        fallback = _unknown_flow(state, has_active_service_context=has_active_service_context)
         knowledge_facts = _knowledge_facts(knowledge_items)
         input_payload = AIRouterInput(
             client={"id": client.id, "name": client.full_name, "status": client.status, "tags": [tag.tag for tag in client.tags]},

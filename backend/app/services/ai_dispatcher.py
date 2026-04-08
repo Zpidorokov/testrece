@@ -361,8 +361,10 @@ def _finalize_booking_reply(
     ai_output.extracted_entities["state_patch"] = {
         **(ai_output.extracted_entities.get("state_patch") or {}),
         "selected_service_id": service.id,
+        "recent_service_id": service.id,
         "offered_slots": [],
         "last_ai_action": "booking_created",
+        "pending_followup": "visit_prep",
         "booked_booking_id": booking.id,
         "booked_start_at": booking.start_at.isoformat(),
     }

@@ -10,9 +10,9 @@ export default async function ClientsPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Client cards</span>
+          <span className="badge">CRM</span>
           <h2>Клиенты</h2>
-          <p>Карточки клиентов с быстрым переходом в переписку и историю взаимодействия.</p>
+          <p>Карточки клиентов и быстрый переход к переписке.</p>
         </div>
       </header>
       <section className="panel">
@@ -55,4 +55,3 @@ export default async function ClientsPage() {
     </div>
   );
 }
-

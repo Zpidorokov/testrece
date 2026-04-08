@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BIGINT, JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import BookingStatus, ClientStatus, ContentType, DialogMode, DialogStatus, LeadStage, MessageDirection, NotificationStatus
@@ -35,7 +35,7 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(unique=True, nullable=False, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(BIGINT, unique=True, nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     username: Mapped[Optional[str]] = mapped_column(String(255))
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
@@ -99,7 +99,7 @@ class Client(TimestampMixin, Base):
     __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(unique=True, nullable=False, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(BIGINT, unique=True, nullable=False, index=True)
     username: Mapped[Optional[str]] = mapped_column(String(255))
     full_name: Mapped[Optional[str]] = mapped_column(String(255))
     phone: Mapped[Optional[str]] = mapped_column(String(64))
@@ -152,9 +152,9 @@ class ForumTopic(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, unique=True)
-    chat_id: Mapped[int] = mapped_column(nullable=False)
-    topic_id: Mapped[Optional[int]] = mapped_column(nullable=True)
-    message_thread_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    topic_id: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
+    message_thread_id: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -165,12 +165,12 @@ class Dialog(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
     business_connection_id: Mapped[Optional[str]] = mapped_column(String(255))
-    telegram_chat_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    telegram_chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False, index=True)
     mode: Mapped[str] = mapped_column(String(32), default=DialogMode.AUTO.value, nullable=False)
     status: Mapped[str] = mapped_column(String(64), default=DialogStatus.NEW.value, nullable=False)
     assigned_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     forum_topic_id: Mapped[Optional[int]] = mapped_column(ForeignKey("forum_topics.id"))
-    forum_thread_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    forum_thread_id: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="dialogs")
     messages: Mapped[list["Message"]] = relationship(back_populates="dialog", cascade="all, delete-orphan")
@@ -181,7 +181,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     dialog_id: Mapped[int] = mapped_column(ForeignKey("dialogs.id"), nullable=False, index=True)
-    telegram_message_id: Mapped[Optional[int]] = mapped_column(nullable=True, index=True)
+    telegram_message_id: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True, index=True)
     business_connection_id: Mapped[Optional[str]] = mapped_column(String(255))
     direction: Mapped[str] = mapped_column(String(10), default=MessageDirection.IN.value, nullable=False)
     sender_type: Mapped[str] = mapped_column(String(16), nullable=False)

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     telegram_dry_run: bool = True
     openrouter_dry_run: bool = True
     max_ai_message_len: int = 350
+    ai_reply_debounce_seconds: int = 4
     telegram_api_base_url: str = "https://api.telegram.org"
 
     @computed_field  # type: ignore[misc]
@@ -57,4 +58,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

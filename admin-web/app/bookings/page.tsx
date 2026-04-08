@@ -9,16 +9,16 @@ export default async function BookingsPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Internal scheduling</span>
+          <span className="badge">Календарь</span>
           <h2>Записи</h2>
-          <p>Внутренний booking engine v1: одна услуга на запись, подбор слотов и ручное создание из CRM.</p>
+          <p>Свободные слоты и ручное создание записи.</p>
         </div>
       </header>
 
       <section className="grid grid-2">
         <article className="panel">
           <h3>Создать запись</h3>
-          <p className="panel-subtitle">Для реального потока staff заполняет клиента, услугу, мастера и время.</p>
+          <p className="panel-subtitle">Клиент, услуга, мастер и время.</p>
           <CreateBookingForm services={services} staff={staff} branches={branches} />
         </article>
 
@@ -64,4 +64,3 @@ export default async function BookingsPage() {
     </div>
   );
 }
-

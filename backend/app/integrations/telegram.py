@@ -65,6 +65,21 @@ class TelegramGateway:
             {"callback_query_id": callback_query_id, "text": text},
         )
 
+    async def send_chat_action(
+        self,
+        *,
+        chat_id: int,
+        action: str,
+        business_connection_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "action": action,
+        }
+        if business_connection_id:
+            payload["business_connection_id"] = business_connection_id
+        return await self._post("sendChatAction", payload)
+
     async def create_forum_topic(self, chat_id: int, title: str) -> TelegramTopicCreateResult:
         response = await self._post("createForumTopic", {"chat_id": chat_id, "name": title})
         result = response.get("result", {})
@@ -101,4 +116,3 @@ class TelegramGateway:
             chat_id=self.settings.staff_group_chat_id,
             text=f'<tg-emoji emoji-id="6039486778597970865">🔔</tg-emoji> {text}',
         )
-

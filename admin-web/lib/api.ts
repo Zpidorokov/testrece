@@ -41,6 +41,9 @@ const fallbackLogs: AuditLog[] = [];
 async function request<T>(path: string, fallback: T): Promise<T> {
   const cookieStore = await cookies();
   const runtimeToken = cookieStore.get("admin_token")?.value ?? ENV_ADMIN_TOKEN;
+  if (!runtimeToken) {
+    return fallback;
+  }
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       cache: "no-store",

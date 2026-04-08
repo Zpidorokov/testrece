@@ -10,7 +10,7 @@ from app.core.settings import Settings
 from app.integrations.telegram import TelegramGateway
 from app.models import Client, Dialog, Message, WebhookEvent
 from app.schemas.telegram import AIRouterOutput
-from app.services.ai_router import route_ai
+from app.services.ai_dispatcher import process_dialog_auto_reply, schedule_dialog_ai_response
 from app.services.audit import log_audit_event
 from app.services.crm import get_or_create_client_from_telegram, get_or_create_dialog, record_message
 from app.services.notifications import create_notification
@@ -174,81 +174,20 @@ async def process_telegram_update(db: Session, *, settings: Settings, update: Di
         )
         return True
 
-    ai_output = await route_ai(
-        db,
-        settings=settings,
-        client=client,
-        dialog=dialog,
-        message_text=text,
-        content_type=content_type,
-        context={"dialog_is_new": is_new_dialog},
-    )
-    if ai_output.should_escalate or ai_output.decision == "escalate":
-        dialog.mode = DialogMode.MANUAL.value
-        dialog.status = "escalated"
-        db.add(dialog)
-        create_notification(
+    if settings.ai_reply_debounce_seconds <= 0:
+        await process_dialog_auto_reply(
             db,
-            notification_type=NotificationType.HUMAN_REQUEST.value,
-            dialog_id=dialog.id,
-            payload={"reason": ai_output.intent},
-        )
-        if ai_output.reply.messages:
-            await _send_ai_messages(
-                db,
-                gateway=gateway,
-                dialog=dialog,
-                business_connection_id=message.get("business_connection_id"),
-                chat_id=message["chat"]["id"],
-                ai_output=ai_output,
-            )
-        await gateway.send_staff_alert(f"Диалог #{dialog.id} требует внимания сотрудника.")
-        return True
-
-    if ai_output.reply.messages:
-        await _send_ai_messages(
-            db,
+            settings=settings,
             gateway=gateway,
-            dialog=dialog,
+            dialog_id=dialog.id,
             business_connection_id=message.get("business_connection_id"),
             chat_id=message["chat"]["id"],
-            ai_output=ai_output,
         )
-
+    else:
+        schedule_dialog_ai_response(
+            settings=settings,
+            dialog_id=dialog.id,
+            business_connection_id=message.get("business_connection_id"),
+            chat_id=message["chat"]["id"],
+        )
     return True
-
-
-async def _send_ai_messages(
-    db: Session,
-    *,
-    gateway: TelegramGateway,
-    dialog: Dialog,
-    business_connection_id: Optional[str],
-    chat_id: int,
-    ai_output: AIRouterOutput,
-) -> None:
-    for part in ai_output.reply.messages:
-        sent = await gateway.send_business_message(
-            business_connection_id=business_connection_id or "",
-            chat_id=chat_id,
-            text=part,
-        )
-        record_message(
-            db,
-            dialog=dialog,
-            telegram_message_id=sent.get("result", {}).get("message_id"),
-            business_connection_id=business_connection_id,
-            direction=MessageDirection.OUT.value,
-            sender_type=SenderType.AI.value,
-            content_type=ContentType.TEXT.value,
-            text_content=part,
-            payload_json={"ai_intent": ai_output.intent},
-        )
-        await mirror_to_topic(
-            db,
-            settings=gateway.settings,
-            gateway=gateway,
-            dialog=dialog,
-            text=part,
-            prefix='<tg-emoji emoji-id="6030400221232501136">🤖</tg-emoji> AI',
-        )

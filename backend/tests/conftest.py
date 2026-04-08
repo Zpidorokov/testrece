@@ -18,6 +18,7 @@ os.environ["ALLOWED_ADMIN_IDS"] = "1001,2002"
 os.environ["TELEGRAM_WEBHOOK_SECRET"] = "test-secret"
 os.environ["TELEGRAM_DRY_RUN"] = "true"
 os.environ["OPENROUTER_DRY_RUN"] = "true"
+os.environ["AI_REPLY_DEBOUNCE_SECONDS"] = "0"
 
 from app.core.settings import get_settings
 

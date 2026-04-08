@@ -27,11 +27,10 @@ export async function POST(request: Request) {
   cookieStore.set("admin_token", parsed.token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: false,
+    secure: true,
     path: "/",
     maxAge: 60 * 60 * 12,
   });
 
   return Response.json({ ok: true });
 }
-

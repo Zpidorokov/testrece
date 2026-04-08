@@ -11,12 +11,9 @@ export default async function DashboardPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Core CRM v1</span>
-          <h2>Dashboard</h2>
-          <p>
-            Живой срез по новым обращениям, записи и ручным диалогам. В этой версии Web App заточен
-            под быстрый операционный контур салона.
-          </p>
+          <span className="badge">Сегодня</span>
+          <h2>Сводка</h2>
+          <p>Новые обращения, диалоги и записи в одном экране.</p>
         </div>
       </header>
 
@@ -74,4 +71,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

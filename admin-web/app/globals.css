@@ -1,20 +1,20 @@
 :root {
-  --bg: #f7f1e7;
-  --bg-strong: #efe5d6;
-  --surface: rgba(255, 252, 246, 0.9);
-  --surface-strong: #fff9f0;
+  --bg: var(--tg-theme-bg-color, #f6f2eb);
+  --bg-strong: var(--tg-theme-secondary-bg-color, #eee6da);
+  --surface: var(--tg-theme-secondary-bg-color, rgba(255, 252, 246, 0.92));
+  --surface-strong: var(--tg-theme-section-bg-color, #fffaf3);
   --border: rgba(87, 57, 34, 0.12);
-  --text: #2f241d;
-  --muted: #7d6656;
-  --accent: #b84b35;
+  --text: var(--tg-theme-text-color, #2f241d);
+  --muted: var(--tg-theme-hint-color, #7d6656);
+  --accent: var(--tg-theme-link-color, #b84b35);
   --accent-soft: rgba(184, 75, 53, 0.1);
   --success: #2f7a52;
   --warning: #ac6b1e;
   --danger: #9b3b32;
-  --shadow: 0 28px 80px rgba(101, 67, 33, 0.12);
-  --radius-xl: 28px;
-  --radius-lg: 22px;
-  --radius-md: 16px;
+  --shadow: 0 18px 42px rgba(101, 67, 33, 0.08);
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+  --radius-md: 14px;
 }
 
 * {
@@ -26,11 +26,12 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(184, 75, 53, 0.2), transparent 28%),
-    radial-gradient(circle at top right, rgba(47, 122, 82, 0.16), transparent 24%),
-    linear-gradient(180deg, #fffaf1 0%, var(--bg) 100%);
+    radial-gradient(circle at top left, rgba(184, 75, 53, 0.14), transparent 26%),
+    linear-gradient(180deg, #fbf8f2 0%, var(--bg) 100%);
   color: var(--text);
   font-family: var(--font-sans), sans-serif;
+  overscroll-behavior-y: none;
+  overflow-x: hidden;
 }
 
 a {
@@ -47,21 +48,28 @@ textarea {
 
 .shell {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100dvh;
 }
 
 .sidebar {
-  padding: 32px 24px;
-  background: linear-gradient(180deg, rgba(52, 37, 26, 0.94) 0%, rgba(76, 48, 30, 0.94) 100%);
-  color: #fff7ef;
   position: sticky;
   top: 0;
-  height: 100vh;
+  z-index: 10;
+  display: grid;
+  gap: 14px;
+  padding:
+    max(14px, var(--tg-safe-area-inset-top, 0px))
+    max(14px, var(--tg-safe-area-inset-right, 0px))
+    10px
+    max(14px, var(--tg-safe-area-inset-left, 0px));
+  background: rgba(52, 37, 26, 0.94);
+  color: #fff7ef;
+  backdrop-filter: blur(18px);
 }
 
 .brand {
-  padding: 18px;
+  padding: 16px 18px;
   border: 1px solid rgba(255, 247, 239, 0.16);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.06);
@@ -77,9 +85,9 @@ textarea {
 }
 
 .brand h1 {
-  margin: 16px 0 8px;
-  font-size: 34px;
-  line-height: 1;
+  margin: 12px 0 6px;
+  font-size: 26px;
+  line-height: 1.05;
 }
 
 .brand p {
@@ -89,13 +97,16 @@ textarea {
 }
 
 .nav {
-  display: grid;
-  gap: 12px;
-  margin-top: 24px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
 }
 
 .nav-link {
-  padding: 14px 16px;
+  white-space: nowrap;
+  padding: 12px 14px;
   border-radius: 999px;
   color: rgba(255, 247, 239, 0.86);
   background: rgba(255, 255, 255, 0.06);
@@ -108,37 +119,42 @@ textarea {
 }
 
 .content {
-  padding: 40px;
+  padding:
+    16px
+    max(14px, var(--tg-content-safe-area-inset-right, var(--tg-safe-area-inset-right, 0px)))
+    max(24px, var(--tg-content-safe-area-inset-bottom, var(--tg-safe-area-inset-bottom, 0px)))
+    max(14px, var(--tg-content-safe-area-inset-left, var(--tg-safe-area-inset-left, 0px)));
 }
 
 .auth-banner {
-  margin-bottom: 18px;
-  padding: 14px 16px;
-  border-radius: 18px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
   border: 1px solid rgba(155, 59, 50, 0.18);
   background: rgba(155, 59, 50, 0.08);
   color: var(--danger);
+  font-size: 14px;
 }
 
 .page-header {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
+  margin-bottom: 10px;
 }
 
 .page-header h2 {
   margin: 0;
-  font-size: 42px;
-  line-height: 1;
+  font-size: 28px;
+  line-height: 1.05;
 }
 
 .page-header p {
-  margin: 8px 0 0;
-  max-width: 720px;
+  margin: 6px 0 0;
+  max-width: 38rem;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.45;
 }
 
 .badge {
@@ -156,7 +172,7 @@ textarea {
 }
 
 .grid-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .grid-2 {
@@ -165,12 +181,12 @@ textarea {
 
 .panel,
 .metric-card {
-  padding: 22px;
+  padding: 18px;
   border-radius: var(--radius-xl);
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(12px);
 }
 
 .metric-card {
@@ -184,7 +200,7 @@ textarea {
 }
 
 .metric-value {
-  font-size: 38px;
+  font-size: 30px;
   line-height: 1;
 }
 
@@ -210,7 +226,7 @@ textarea {
 
 .table th,
 .table td {
-  padding: 14px 12px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
   text-align: left;
@@ -324,14 +340,60 @@ textarea {
 
 .messages {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  max-height: min(52dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .message {
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.74);
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.54);
   border: 1px solid var(--border);
+}
+
+.empty-state {
+  padding: 18px 6px;
+  color: var(--muted);
+}
+
+@media (min-width: 980px) {
+  .shell {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    height: 100dvh;
+    align-content: start;
+    padding: 24px 18px;
+  }
+
+  .nav {
+    display: grid;
+    overflow: visible;
+  }
+
+  .content {
+    padding: 28px 28px 32px;
+  }
+
+  .grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 979px) {
+  .page-header {
+    gap: 12px;
+  }
+
+  .grid-2,
+  .split-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .message small {
@@ -340,34 +402,7 @@ textarea {
   color: var(--muted);
 }
 
-.empty-state {
-  padding: 26px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.38);
-}
-
 @media (max-width: 1080px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: static;
-    height: auto;
-  }
-
-  .content {
-    padding: 24px;
-  }
-
-  .grid-4,
-  .grid-2,
-  .split-layout {
-    grid-template-columns: 1fr;
-  }
-
   .page-header {
     flex-direction: column;
     align-items: flex-start;

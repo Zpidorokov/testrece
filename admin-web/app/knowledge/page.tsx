@@ -8,9 +8,9 @@ export default async function KnowledgePage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">AI knowledge base</span>
+          <span className="badge">Контент</span>
           <h2>База знаний</h2>
-          <p>Все знания для AI заполняются вручную в `v1`: FAQ, услуги, акции, ToV и правила эскалации.</p>
+          <p>Услуги, FAQ, правила записи и tone of voice.</p>
         </div>
       </header>
 
@@ -39,4 +39,3 @@ export default async function KnowledgePage() {
     </div>
   );
 }
-

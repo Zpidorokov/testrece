@@ -7,9 +7,9 @@ export default async function SettingsPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">System view</span>
+          <span className="badge">Система</span>
           <h2>Настройки</h2>
-          <p>Срез по каталогам и последним аудит-событиям, чтобы быстро проверять конфигурацию и поведение системы.</p>
+          <p>Каталоги и последние системные события.</p>
         </div>
       </header>
 
@@ -53,4 +53,3 @@ export default async function SettingsPage() {
     </div>
   );
 }
-

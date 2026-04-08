@@ -12,9 +12,9 @@ export default async function DialogsPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Takeover + Auto routing</span>
+          <span className="badge">Операционный чат</span>
           <h2>Диалоги</h2>
-          <p>Слева операционный список, справа текущая переписка и ручные действия сотрудника.</p>
+          <p>Список обращений, текущая переписка и takeover.</p>
         </div>
       </header>
 
@@ -79,9 +79,7 @@ export default async function DialogsPage() {
           {selected ? (
             <section className="panel">
               <h3>Ручные действия</h3>
-              <p className="panel-subtitle">
-                `takeover`, возврат в auto и ручная отправка идут через server-side proxy Next.js.
-              </p>
+              <p className="panel-subtitle">Перевод в manual, возврат в auto и ручная отправка.</p>
               <DialogActions dialogId={selected.id} mode={selected.mode} />
             </section>
           ) : null}
@@ -90,4 +88,3 @@ export default async function DialogsPage() {
     </div>
   );
 }
-

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { DialogActions } from "@/components/dialog-actions";
 import { StatusPill } from "@/components/status-pill";
 import { getDialog, getDialogs } from "@/lib/api";
+import { formatDialogMode, formatDialogStatus } from "@/lib/ui";
 
 export default async function DialogsPage() {
   const dialogs = await getDialogs();
@@ -14,7 +15,7 @@ export default async function DialogsPage() {
         <div>
           <span className="badge">Операционный чат</span>
           <h2>Диалоги</h2>
-          <p>Список обращений, текущая переписка и takeover.</p>
+          <p>Все обращения, текущая переписка и быстрый ручной перехват.</p>
         </div>
       </header>
 
@@ -34,23 +35,23 @@ export default async function DialogsPage() {
               {dialogs.length ? (
                 dialogs.map((dialog) => (
                   <tr key={dialog.id}>
-                    <td>
-                      <Link href={`/clients/${dialog.client_id}`}>{dialog.client_name ?? `Client ${dialog.client_id}`}</Link>
+                    <td data-label="Клиент">
+                      <Link href={`/clients/${dialog.client_id}`}>{dialog.client_name ?? `Клиент #${dialog.client_id}`}</Link>
                     </td>
-                    <td>
+                    <td data-label="Статус">
                       <StatusPill
-                        label={dialog.status}
+                        label={formatDialogStatus(dialog.status)}
                         tone={dialog.status === "escalated" ? "danger" : dialog.mode === "manual" ? "warning" : "neutral"}
                       />
                     </td>
-                    <td>{dialog.mode}</td>
-                    <td>{dialog.last_message ?? "..."}</td>
+                    <td data-label="Режим">{formatDialogMode(dialog.mode)}</td>
+                    <td data-label="Последнее">{dialog.last_message ?? "Пока без ответа"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={4}>
-                    <div className="empty-state">Диалоги появятся после первого Telegram update.</div>
+                    <div className="empty-state">Диалоги появятся после первого входящего сообщения в Telegram.</div>
                   </td>
                 </tr>
               )}
@@ -65,8 +66,8 @@ export default async function DialogsPage() {
               <div className="messages">
                 {selected.messages.map((message) => (
                   <article className="message" key={message.id}>
-                    <strong>{message.sender_type}</strong>
-                    <div>{message.text_content ?? "media"}</div>
+                    <strong>{message.sender_type === "client" ? "Клиент" : message.sender_type === "ai" ? "AI" : "Сотрудник"}</strong>
+                    <div>{message.text_content ?? "Медиа"}</div>
                     <small>{new Date(message.created_at).toLocaleString("ru-RU")}</small>
                   </article>
                 ))}
@@ -79,7 +80,7 @@ export default async function DialogsPage() {
           {selected ? (
             <section className="panel">
               <h3>Ручные действия</h3>
-              <p className="panel-subtitle">Перевод в manual, возврат в auto и ручная отправка.</p>
+              <p className="panel-subtitle">Перевести в ручной режим, вернуть AI и ответить самому.</p>
               <DialogActions dialogId={selected.id} mode={selected.mode} />
             </section>
           ) : null}

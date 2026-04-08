@@ -28,7 +28,7 @@ export function KnowledgeComposer() {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { detail?: string; message?: string } | null;
-        throw new Error(payload?.detail ?? payload?.message ?? "Не удалось сохранить knowledge item");
+        throw new Error(payload?.detail ?? payload?.message ?? "Не удалось сохранить блок знаний");
       }
       setTitle("");
       setContent("");
@@ -43,21 +43,27 @@ export function KnowledgeComposer() {
   return (
     <div className="form-grid">
       <select className="input" value={kind} onChange={(event) => setKind(event.target.value)}>
-        <option value="faq">FAQ</option>
-        <option value="service_info">Service info</option>
-        <option value="promo">Promo</option>
-        <option value="policy">Policy</option>
-        <option value="contraindication">Contraindication</option>
-        <option value="tone_of_voice">Tone of voice</option>
-        <option value="escalation_rule">Escalation rule</option>
+        <option value="faq">FAQ и общие факты</option>
+        <option value="service_info">Услуги</option>
+        <option value="promo">Акции</option>
+        <option value="policy">Правила</option>
+        <option value="contraindication">Ограничения</option>
+        <option value="tone_of_voice">Тон общения</option>
+        <option value="objection_handling">Работа с возражениями</option>
+        <option value="escalation_rule">Когда звать человека</option>
       </select>
-      <input className="input" placeholder="Заголовок" value={title} onChange={(event) => setTitle(event.target.value)} />
-      <textarea className="textarea" placeholder="Контент" rows={6} value={content} onChange={(event) => setContent(event.target.value)} />
+      <input className="input" placeholder="Название блока" value={title} onChange={(event) => setTitle(event.target.value)} />
+      <textarea
+        className="textarea"
+        placeholder="Пиши фактами и по делу: это внутренняя опора для AI, а не готовая простыня ответа клиенту."
+        rows={6}
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+      />
       <button className="button" disabled={busy || !title || !content} onClick={() => void submit()}>
-        Добавить элемент
+        Добавить блок
       </button>
       {error ? <p className="inline-error">{error}</p> : null}
     </div>
   );
 }
-

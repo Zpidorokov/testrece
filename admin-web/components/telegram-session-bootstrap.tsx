@@ -22,6 +22,10 @@ type TelegramWindow = Window & {
       setHeaderColor?: (color: string) => void;
       setBackgroundColor?: (color: string) => void;
       setBottomBarColor?: (color: string) => void;
+      onEvent?: (eventType: string, handler: (payload?: unknown) => void) => void;
+      offEvent?: (eventType: string, handler: (payload?: unknown) => void) => void;
+      viewportHeight?: number;
+      isExpanded?: boolean;
     };
   };
 };
@@ -39,6 +43,7 @@ export function TelegramSessionBootstrap() {
     bootstrappedRef.current = true;
 
     const telegram = (window as TelegramWindow).Telegram?.WebApp;
+    const root = document.documentElement;
     telegram?.ready?.();
     telegram?.expand?.();
     telegram?.disableVerticalSwipes?.();
@@ -46,14 +51,36 @@ export function TelegramSessionBootstrap() {
     telegram?.setHeaderColor?.("bg_color");
     telegram?.setBackgroundColor?.("bg_color");
     telegram?.setBottomBarColor?.("bg_color");
-    telegram?.requestFullscreen?.();
+    const syncViewport = () => {
+      const height = telegram?.viewportHeight ? `${telegram.viewportHeight}px` : `${window.innerHeight}px`;
+      root.style.setProperty("--app-height", height);
+      document.body.style.minHeight = height;
+    };
+    syncViewport();
 
-    const root = document.documentElement;
+    const handleFullscreenFailed = () => {
+      root.dataset.fullscreenFailed = "true";
+    };
+
+    telegram?.onEvent?.("viewportChanged", syncViewport);
+    telegram?.onEvent?.("fullscreenChanged", syncViewport);
+    telegram?.onEvent?.("fullscreenFailed", handleFullscreenFailed);
+
+    window.setTimeout(() => {
+      telegram?.expand?.();
+      telegram?.requestFullscreen?.();
+      syncViewport();
+    }, 120);
+
     root.dataset.telegramMiniApp = telegram ? "true" : "false";
     const initData = telegram?.initData;
     const telegramUserId = telegram?.initDataUnsafe?.user?.id;
     if (!initData || !telegramUserId) {
-      return;
+      return () => {
+        telegram?.offEvent?.("viewportChanged", syncViewport);
+        telegram?.offEvent?.("fullscreenChanged", syncViewport);
+        telegram?.offEvent?.("fullscreenFailed", handleFullscreenFailed);
+      };
     }
 
     void (async () => {
@@ -78,6 +105,12 @@ export function TelegramSessionBootstrap() {
         router.refresh();
       });
     })();
+
+    return () => {
+      telegram?.offEvent?.("viewportChanged", syncViewport);
+      telegram?.offEvent?.("fullscreenChanged", syncViewport);
+      telegram?.offEvent?.("fullscreenFailed", handleFullscreenFailed);
+    };
   }, [router]);
 
   if (!message) {

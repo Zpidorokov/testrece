@@ -15,13 +15,21 @@ const navItems = [
 export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="shell">
+      <header className="mobile-header">
+        <div>
+          <span className="brand-kicker">Aster CRM</span>
+          <strong>Управление салоном</strong>
+        </div>
+        <span className="badge">Telegram</span>
+      </header>
+
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-kicker">BotReceptionist</span>
           <h1>Aster CRM</h1>
-          <p>Операционная панель салона в Telegram.</p>
+          <p>Операционная панель салона в Telegram без лишнего шума.</p>
         </div>
-        <nav className="nav">
+        <nav className="nav desktop-nav">
           {navItems.map((item) => (
             <Link key={item.href} className="nav-link" href={item.href}>
               {item.label}
@@ -31,8 +39,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="content">
         <TelegramSessionBootstrap />
-        {children}
+        <div className="content-frame">{children}</div>
       </main>
+      <nav className="mobile-nav">
+        {navItems.map((item) => (
+          <Link key={item.href} className="mobile-nav-link" href={item.href}>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

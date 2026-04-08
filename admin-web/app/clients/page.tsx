@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { StatusPill } from "@/components/status-pill";
 import { getClients } from "@/lib/api";
+import { formatClientStatus } from "@/lib/ui";
 
 export default async function ClientsPage() {
   const clients = await getClients();
@@ -22,7 +23,7 @@ export default async function ClientsPage() {
             <tr>
               <th>ID</th>
               <th>Имя</th>
-              <th>Username</th>
+              <th>Telegram</th>
               <th>Статус</th>
               <th>Телефон</th>
             </tr>
@@ -31,15 +32,17 @@ export default async function ClientsPage() {
             {clients.length ? (
               clients.map((client) => (
                 <tr key={client.id}>
-                  <td className="mono">#{client.id}</td>
-                  <td>
+                  <td className="mono" data-label="ID">
+                    #{client.id}
+                  </td>
+                  <td data-label="Имя">
                     <Link href={`/clients/${client.id}`}>{client.full_name ?? "Без имени"}</Link>
                   </td>
-                  <td>{client.username ? `@${client.username}` : "—"}</td>
-                  <td>
-                    <StatusPill label={client.status} />
+                  <td data-label="Telegram">{client.username ? `@${client.username}` : "—"}</td>
+                  <td data-label="Статус">
+                    <StatusPill label={formatClientStatus(client.status)} />
                   </td>
-                  <td>{client.phone ?? "—"}</td>
+                  <td data-label="Телефон">{client.phone ?? "—"}</td>
                 </tr>
               ))
             ) : (

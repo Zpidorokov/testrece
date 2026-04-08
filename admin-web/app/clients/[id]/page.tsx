@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { StatusPill } from "@/components/status-pill";
 import { getClient } from "@/lib/api";
+import { formatClientStatus } from "@/lib/ui";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -15,7 +16,7 @@ export default async function ClientDetailPage({ params }: Props) {
     return (
       <div className="panel">
         <h3>Клиент не найден</h3>
-        <p className="panel-subtitle">Проверьте backend и наличие авторизационного токена для чтения данных.</p>
+        <p className="panel-subtitle">Проверьте доступ к API и наличие токена для чтения данных.</p>
       </div>
     );
   }
@@ -24,7 +25,7 @@ export default async function ClientDetailPage({ params }: Props) {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Client #{client.id}</span>
+          <span className="badge">Клиент #{client.id}</span>
           <h2>{client.name ?? "Без имени"}</h2>
           <p>Карточка клиента, теги, заметки и быстрый переход назад в диалоги.</p>
         </div>
@@ -40,7 +41,7 @@ export default async function ClientDetailPage({ params }: Props) {
             <div>
               <strong>Статус</strong>
               <div>
-                <StatusPill label={client.status} />
+                <StatusPill label={formatClientStatus(client.status)} />
               </div>
             </div>
             <div>
@@ -48,7 +49,7 @@ export default async function ClientDetailPage({ params }: Props) {
               <div className="mono">{client.telegram_user_id}</div>
             </div>
             <div>
-              <strong>Username</strong>
+              <strong>Ник в Telegram</strong>
               <div>{client.username ? `@${client.username}` : "—"}</div>
             </div>
             <div>
@@ -80,4 +81,3 @@ export default async function ClientDetailPage({ params }: Props) {
     </div>
   );
 }
-

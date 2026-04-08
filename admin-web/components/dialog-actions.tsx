@@ -27,12 +27,12 @@ export function DialogActions({ dialogId, mode }: Props) {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { detail?: string; message?: string } | null;
-        throw new Error(payload?.detail ?? payload?.message ?? "Action failed");
+        throw new Error(payload?.detail ?? payload?.message ?? "Не удалось выполнить действие");
       }
       startTransition(() => router.refresh());
       setText("");
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unexpected error");
+      setError(caughtError instanceof Error ? caughtError.message : "Неизвестная ошибка");
     } finally {
       setBusy(false);
     }
@@ -51,7 +51,7 @@ export function DialogActions({ dialogId, mode }: Props) {
             disabled={busy}
             onClick={() => void call(`/api/dialogs/${dialogId}/takeover`, { assigned_user_id: 1, reason: "manual_review" })}
           >
-            Take over
+            Забрать диалог
           </button>
         )}
       </div>
@@ -73,4 +73,3 @@ export function DialogActions({ dialogId, mode }: Props) {
     </div>
   );
 }
-

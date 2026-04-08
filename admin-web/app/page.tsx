@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricCard } from "@/components/metric-card";
 import { StatusPill } from "@/components/status-pill";
 import { getDialogs, getOverview } from "@/lib/api";
+import { formatDialogMode, formatDialogStatus } from "@/lib/ui";
 
 export default async function DashboardPage() {
   const [overview, dialogs] = await Promise.all([getOverview(), getDialogs()]);
@@ -19,11 +20,11 @@ export default async function DashboardPage() {
 
       <section className="grid grid-4">
         <MetricCard label="Новые клиенты" value={overview.new_clients} hint="Воронка начинает считаться с первого Telegram обращения." />
-        <MetricCard label="Диалоги" value={overview.dialogs_total} hint="С учётом авто и manual режимов." />
-        <MetricCard label="Записи" value={overview.bookings_total} hint="Только внутренний booking engine v1." />
+        <MetricCard label="Диалоги" value={overview.dialogs_total} hint="С учетом автоответа и ручного режима." />
+        <MetricCard label="Записи" value={overview.bookings_total} hint="Считаются только записи из встроенного контура." />
         <MetricCard
           label="Средний первый ответ"
-          value={`${overview.avg_first_response_sec.toFixed(0)}s`}
+          value={`${overview.avg_first_response_sec.toFixed(0)} c`}
           hint="Считается по первой входящей и первой исходящей реплике."
         />
       </section>
@@ -44,24 +45,26 @@ export default async function DashboardPage() {
             {dialogs.length ? (
               dialogs.slice(0, 8).map((dialog) => (
                 <tr key={dialog.id}>
-                  <td className="mono">#{dialog.id}</td>
-                  <td>
-                    <Link href={`/clients/${dialog.client_id}`}>{dialog.client_name ?? `Client ${dialog.client_id}`}</Link>
+                  <td className="mono" data-label="ID">
+                    #{dialog.id}
                   </td>
-                  <td>
+                  <td data-label="Клиент">
+                    <Link href={`/clients/${dialog.client_id}`}>{dialog.client_name ?? `Клиент #${dialog.client_id}`}</Link>
+                  </td>
+                  <td data-label="Статус">
                     <StatusPill
-                      label={dialog.status}
+                      label={formatDialogStatus(dialog.status)}
                       tone={dialog.status === "manual" || dialog.status === "escalated" ? "warning" : "neutral"}
                     />
                   </td>
-                  <td>{dialog.mode}</td>
-                  <td>{dialog.last_message ?? "Пока без сообщений"}</td>
+                  <td data-label="Режим">{formatDialogMode(dialog.mode)}</td>
+                  <td data-label="Последнее">{dialog.last_message ?? "Пока без сообщений"}</td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td colSpan={5}>
-                  <div className="empty-state">Пока нет данных из backend. После запуска API таблица заполнится автоматически.</div>
+                  <div className="empty-state">Пока нет данных. Как только начнут приходить диалоги, таблица заполнится автоматически.</div>
                 </td>
               </tr>
             )}

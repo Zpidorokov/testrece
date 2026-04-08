@@ -8,7 +8,7 @@ export async function proxyMutation(path: string, options: RequestInit): Promise
   const runtimeToken = cookieStore.get("admin_token")?.value ?? ENV_ADMIN_TOKEN;
   if (!runtimeToken) {
     return Response.json(
-      { ok: false, message: "Set BOTRECEPTIONIST_ADMIN_TOKEN for mutating actions." },
+      { ok: false, message: "Нужен BOTRECEPTIONIST_ADMIN_TOKEN для действий с изменением данных." },
       { status: 503 },
     );
   }

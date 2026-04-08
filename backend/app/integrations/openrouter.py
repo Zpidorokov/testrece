@@ -31,6 +31,8 @@ class OpenRouterAdapter:
                 {"role": "user", "content": prompt},
             ],
             "response_format": {"type": "json_object"},
+            "temperature": 0.25,
+            "max_tokens": 450,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.openrouter_api_key}",
@@ -57,4 +59,3 @@ def build_fallback_output(intent: str, risk_level: str, should_escalate: bool, m
         extracted_entities={},
         next_action=next_action,
     )
-

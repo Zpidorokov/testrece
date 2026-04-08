@@ -18,21 +18,21 @@ export default async function SettingsPage() {
           <h3>Каталоги</h3>
           <div className="stack">
             <div>
-              <strong>Services</strong>
+              <strong>Услуги</strong>
               <p className="panel-subtitle">{services.length} элементов</p>
             </div>
             <div>
-              <strong>Staff</strong>
+              <strong>Команда</strong>
               <p className="panel-subtitle">{staff.length} сотрудников</p>
             </div>
             <div>
-              <strong>Branches</strong>
+              <strong>Филиалы</strong>
               <p className="panel-subtitle">{branches.length} филиалов</p>
             </div>
           </div>
         </article>
         <article className="panel">
-          <h3>Последние audit logs</h3>
+          <h3>Последние события</h3>
           <div className="stack">
             {logs.length ? (
               logs.slice(0, 10).map((log) => (
@@ -45,7 +45,7 @@ export default async function SettingsPage() {
                 </article>
               ))
             ) : (
-              <div className="empty-state">Как только backend начнёт обрабатывать события, здесь появится аудит.</div>
+              <div className="empty-state">Как только система начнет обрабатывать события, здесь появится журнал действий.</div>
             )}
           </div>
         </article>

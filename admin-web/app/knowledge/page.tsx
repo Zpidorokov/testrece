@@ -1,4 +1,5 @@
 import { KnowledgeComposer } from "@/components/knowledge-composer";
+import { KnowledgeListEditor } from "@/components/knowledge-list-editor";
 import { getKnowledge } from "@/lib/api";
 
 export default async function KnowledgePage() {
@@ -8,32 +9,22 @@ export default async function KnowledgePage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <span className="badge">Контент</span>
+          <span className="badge">AI-опора</span>
           <h2>База знаний</h2>
-          <p>Услуги, FAQ, правила записи и tone of voice.</p>
+          <p>Редактируй факты, услуги, правила и тон общения. AI должен брать отсюда смысл, а не копировать текст абзацами.</p>
         </div>
       </header>
 
       <section className="grid grid-2">
         <article className="panel">
-          <h3>Добавить элемент</h3>
+          <h3>Новый блок</h3>
+          <p className="panel-subtitle">Коротко, по фактам и без воды.</p>
           <KnowledgeComposer />
         </article>
         <article className="panel">
-          <h3>Текущий knowledge set</h3>
-          <div className="stack">
-            {items.length ? (
-              items.map((item) => (
-                <article className="message" key={item.id}>
-                  <strong>{item.title}</strong>
-                  <div className="mono">{item.kind}</div>
-                  <p>{item.content}</p>
-                </article>
-              ))
-            ) : (
-              <div className="empty-state">Пока пусто. После добавления записей AI начнёт использовать их в retrieval.</div>
-            )}
-          </div>
+          <h3>Текущие блоки</h3>
+          <p className="panel-subtitle">Можно редактировать, выключать и удалять прямо отсюда.</p>
+          {items.length ? <KnowledgeListEditor items={items} /> : <div className="empty-state">Пока пусто. Добавь первые факты о салоне, услугах и правилах.</div>}
         </article>
       </section>
     </div>

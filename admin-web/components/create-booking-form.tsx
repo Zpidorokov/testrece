@@ -59,7 +59,7 @@ export function CreateBookingForm({
     <div className="form-grid">
       <input
         className="input"
-        placeholder="Client ID"
+        placeholder="ID клиента"
         value={form.client_id}
         onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
       />
@@ -103,4 +103,3 @@ export function CreateBookingForm({
     </div>
   );
 }
-

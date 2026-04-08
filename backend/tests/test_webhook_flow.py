@@ -67,3 +67,34 @@ def test_voice_payload_is_logged_and_processed(client):
         assert messages[0].content_type == "voice"
         assert "маникюр" in (messages[0].text_content or "").lower()
         assert any(message.direction == "out" for message in messages)
+
+
+def test_service_question_uses_catalog_instead_of_location_dump(client):
+    response = client.post(
+        "/webhooks/telegram",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"},
+        json={
+            "update_id": 3,
+            "business_message": {
+                "message_id": 12,
+                "business_connection_id": "bc-1",
+                "chat": {"id": 9003},
+                "from": {"id": 779, "first_name": "Ирина", "username": "irina"},
+                "text": "Привет, какие услуги есть?",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 779))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+
+        assert outbound
+        reply_text = "\n".join(filter(None, (message.text_content for message in outbound))).lower()
+        assert "маникюр" in reply_text
+        assert "педикюр" in reply_text
+        assert "аптекарск" not in reply_text

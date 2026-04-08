@@ -19,8 +19,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BotReceptionist Admin",
-  description: "Telegram Business CRM for salon staff",
+  title: "Aster CRM",
+  description: "Мини-приложение для управления салоном в Telegram",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

@@ -4,6 +4,8 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models import Booking, Client, Dialog, ForumTopic, Lead, Message, Notification
+from app.schemas.telegram import AIRouterOutput, AIRouterReply
+from app.services.ai_dispatcher import _render_outbound_parts
 
 
 def test_business_webhook_creates_client_dialog_and_ai_reply(client):
@@ -229,3 +231,27 @@ def test_rude_client_message_does_not_break_tone(client):
 
         assert "сука" not in reply_text
         assert "на вы" in reply_text or "буду общаться на вы" in reply_text
+
+
+def test_outbound_messages_are_joined_and_html_safe():
+    ai_output = AIRouterOutput(
+        decision="reply",
+        intent="service_info",
+        risk_level="low",
+        should_escalate=False,
+        reply=AIRouterReply(
+            split=False,
+            messages=[
+                '<tg-emoji emoji-id="5870764288364252592">🙂</tg-emoji> Подберу услугу',
+                "Цена < 5000 & можно сегодня",
+            ],
+        ),
+        extracted_entities={},
+        next_action="offer_booking",
+    )
+
+    parts = _render_outbound_parts(ai_output)
+
+    assert len(parts) == 1
+    assert '<tg-emoji emoji-id="5870764288364252592">🙂</tg-emoji>' in parts[0]
+    assert "&lt; 5000 &amp; можно сегодня" in parts[0]

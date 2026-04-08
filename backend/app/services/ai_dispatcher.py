@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import hashlib
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -25,6 +27,7 @@ from app.services.topic_sync import mirror_to_topic
 
 _dialog_generations: dict[int, int] = {}
 _dialog_tasks: dict[int, asyncio.Task[None]] = {}
+_TG_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="[^"]+">.*?</tg-emoji>', re.DOTALL)
 
 
 def schedule_dialog_ai_response(
@@ -233,6 +236,33 @@ def _reply_hash(messages: list[str]) -> str:
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
 
 
+def _sanitize_outbound_html(message: str) -> str:
+    placeholders: dict[str, str] = {}
+
+    def protect(match: re.Match[str]) -> str:
+        key = f"__TG_EMOJI_{len(placeholders)}__"
+        placeholders[key] = match.group(0)
+        return key
+
+    protected = _TG_EMOJI_RE.sub(protect, message.strip())
+    escaped = html.escape(protected, quote=False)
+    for key, value in placeholders.items():
+        escaped = escaped.replace(key, value)
+    escaped = re.sub(r"[ \t]+\n", "\n", escaped)
+    escaped = re.sub(r"\n{3,}", "\n\n", escaped)
+    escaped = re.sub(r"[ \t]{2,}", " ", escaped)
+    return escaped.strip()
+
+
+def _render_outbound_parts(ai_output: AIRouterOutput) -> list[str]:
+    parts = [_sanitize_outbound_html(part) for part in ai_output.reply.messages if part and part.strip()]
+    if not parts:
+        return []
+    if not ai_output.reply.split:
+        return ["\n\n".join(parts)]
+    return parts
+
+
 def _parse_selected_slot(item: Optional[dict]) -> Optional[dict]:
     if not item or "start_at" not in item:
         return None
@@ -434,7 +464,8 @@ async def send_ai_messages(
     chat_id: int,
     ai_output: AIRouterOutput,
 ) -> None:
-    for index, part in enumerate(ai_output.reply.messages):
+    outbound_parts = _render_outbound_parts(ai_output)
+    for index, part in enumerate(outbound_parts):
         await gateway.send_chat_action(
             chat_id=chat_id,
             action="typing",
@@ -464,10 +495,10 @@ async def send_ai_messages(
             text=part,
             prefix='<tg-emoji emoji-id="6030400221232501136">🤖</tg-emoji> AI',
         )
-        if index < len(ai_output.reply.messages) - 1:
+        if index < len(outbound_parts) - 1:
             await asyncio.sleep(1.0)
     state = dict(dialog.ai_state_json or {})
-    state["last_reply_hash"] = _reply_hash(ai_output.reply.messages)
+    state["last_reply_hash"] = _reply_hash(outbound_parts)
     state["last_ai_action"] = ai_output.extracted_entities.get("state_patch", {}).get("last_ai_action", ai_output.next_action)
     dialog.ai_state_json = state
     db.add(dialog)

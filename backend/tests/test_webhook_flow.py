@@ -101,6 +101,37 @@ def test_service_question_uses_catalog_instead_of_location_dump(client):
         assert "хочешь" not in reply_text
 
 
+def test_service_question_with_swearing_still_returns_catalog(client):
+    response = client.post(
+        "/webhooks/telegram",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"},
+        json={
+            "update_id": 4,
+            "business_message": {
+                "message_id": 13,
+                "business_connection_id": "bc-1",
+                "chat": {"id": 9004},
+                "from": {"id": 782, "first_name": "Лена", "username": "lena"},
+                "text": "какие есть услуги блять",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 782))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+
+        assert outbound
+        reply_text = "\n".join(filter(None, (message.text_content for message in outbound))).lower()
+        assert "маникюр" in reply_text
+        assert "педикюр" in reply_text
+        assert "буду общаться на вы" not in reply_text
+
+
 def test_booking_flow_offers_slots_and_creates_booking(client):
     updates = [
         {

@@ -142,9 +142,21 @@ export function TelegramSessionBootstrap() {
         }),
       });
 
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; skipped?: boolean; message?: string; detail?: string } | null;
+
+      if (response.ok && payload?.skipped) {
+        sessionStorage.setItem(sessionCacheKey, initData);
+        return;
+      }
+
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { detail?: string; message?: string } | null;
-        setMessage(payload?.detail ?? payload?.message ?? "Не удалось открыть рабочую панель.");
+        if (response.status === 404) {
+          sessionStorage.setItem(sessionCacheKey, initData);
+          return;
+        }
+        if (response.status === 401 || response.status === 403) {
+          setMessage(payload?.detail ?? payload?.message ?? "Не удалось открыть рабочую панель.");
+        }
         return;
       }
 

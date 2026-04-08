@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const NORMALIZED_API_BASE = API_BASE.replace(/\/admin\/?$/, "").replace(/\/$/, "");
 
 export async function POST(request: Request) {
   const payload = await request.json();
-  const response = await fetch(`${API_BASE}/api/admin/session/init`, {
+  const response = await fetch(`${NORMALIZED_API_BASE}/api/admin/session/init`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -14,12 +15,21 @@ export async function POST(request: Request) {
 
   const text = await response.text();
   if (!response.ok) {
-    return new Response(text, {
-      status: response.status,
-      headers: {
-        "Content-Type": response.headers.get("Content-Type") ?? "application/json",
-      },
-    });
+    if (response.status === 404) {
+      return Response.json({ ok: false, skipped: true });
+    }
+
+    let message = "Не удалось открыть рабочую панель.";
+    try {
+      const parsed = JSON.parse(text) as { detail?: string; message?: string };
+      message = parsed.detail ?? parsed.message ?? message;
+    } catch {
+      if (text.trim()) {
+        message = text.trim();
+      }
+    }
+
+    return Response.json({ ok: false, message }, { status: response.status });
   }
 
   const parsed = JSON.parse(text) as { token: string };

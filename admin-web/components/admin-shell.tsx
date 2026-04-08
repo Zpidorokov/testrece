@@ -59,7 +59,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <strong>{activeItem.label}</strong>
             <small>{activeItem.caption}</small>
           </div>
-          <span className="mobile-status">В работе</span>
+          <span className="mobile-status">Онлайн</span>
         </header>
 
         <main className="content">

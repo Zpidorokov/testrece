@@ -36,23 +36,23 @@ HIGH_RISK_KEYWORDS = [
     "администратор",
     "manager",
 ]
-RUDE_KEYWORDS = [
-    "сука",
-    "блять",
-    "нахуй",
-    "хуй",
-    "еб",
+TONE_COMPLAINT_PATTERNS = [
     "чё за тон",
     "на ты",
     "так общаешься",
     "грубо",
     "хам",
+    "общайся нормально",
+    "нормально общайся",
+    "на вы",
 ]
 BOOKING_KEYWORDS = ["запис", "окно", "slot", "appointment", "давайте", "подбер", "свободн", "давай", "запиши"]
 PRICE_KEYWORDS = ["цена", "стоим", "сколько", "прайс"]
 SERVICE_KEYWORDS = ["услуг", "маник", "педик", "бров", "ресниц", "ламин", "стриж", "уклад", "окраш", "airtouch"]
 GENERAL_SERVICE_PATTERNS = [
     "какие услуги",
+    "какие есть",
+    "какие есть услуги",
     "что есть",
     "что делаете",
     "по услугам",
@@ -133,7 +133,7 @@ def _detect_intent(text: str) -> str:
     lower = text.lower()
     if any(keyword in lower for keyword in HIGH_RISK_KEYWORDS):
         return "complaint"
-    if any(keyword in lower for keyword in RUDE_KEYWORDS):
+    if any(keyword in lower for keyword in TONE_COMPLAINT_PATTERNS):
         return "tone_repair"
     if "перенес" in lower:
         return "reschedule"
@@ -148,6 +148,18 @@ def _detect_intent(text: str) -> str:
     if any(word in lower for word in ["привет", "здравств", "добрый"]):
         return "greeting"
     return "unknown"
+
+
+def _is_catalog_question(text: str) -> bool:
+    lower = text.lower()
+    if any(pattern in lower for pattern in GENERAL_SERVICE_PATTERNS):
+        return True
+    return (
+        ("какие" in lower and "есть" in lower)
+        or ("что" in lower and "есть" in lower)
+        or ("что" in lower and "делаете" in lower)
+        or ("что" in lower and "можете" in lower)
+    )
 
 
 def _is_affirmative(text: str) -> bool:
@@ -760,7 +772,7 @@ async def route_ai(
             state_patch={"last_ai_action": "request_new_slot"},
         )
 
-    if intent == "service_info" and not matched_services and any(pattern in message_text.lower() for pattern in GENERAL_SERVICE_PATTERNS):
+    if intent == "service_info" and not matched_services and _is_catalog_question(message_text):
         return _reply(
             intent="service_info",
             risk_level="low",

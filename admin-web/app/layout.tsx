@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
 import Script from "next/script";
 import type { ReactNode } from "react";
@@ -21,6 +21,13 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Aster CRM",
   description: "Мини-приложение для управления салоном в Telegram",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b1118",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

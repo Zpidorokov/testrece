@@ -1,0 +1,17 @@
+[Unit]
+Description=BotReceptionist Next.js admin web
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__/admin-web
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

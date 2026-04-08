@@ -1,0 +1,106 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: botreceptionist-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: botreceptionist
+      POSTGRES_USER: botreceptionist
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botreceptionist -d botreceptionist"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: botreceptionist-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: botreceptionist-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://botreceptionist:${POSTGRES_PASSWORD:-change_me}@postgres:5432/botreceptionist
+      REDIS_URL: redis://redis:6379/0
+      ADMIN_WEB_URL: https://${DOMAIN}/admin
+      TELEGRAM_DRY_RUN: "false"
+      OPENROUTER_DRY_RUN: "false"
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: botreceptionist-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://botreceptionist:${POSTGRES_PASSWORD:-change_me}@postgres:5432/botreceptionist
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_DRY_RUN: "false"
+      OPENROUTER_DRY_RUN: "false"
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "celery -A app.workers.celery_app.celery_app worker --loglevel=info"
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: admin-web/Dockerfile
+    container_name: botreceptionist-admin-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: https://${DOMAIN}
+      BOTRECEPTIONIST_ADMIN_TOKEN: ${BOTRECEPTIONIST_ADMIN_TOKEN:-}
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: botreceptionist-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - admin-web
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  postgres_data:
+  redis_data:
+

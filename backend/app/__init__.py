@@ -1,0 +1,2 @@
+"""Bot receptionist backend package."""
+

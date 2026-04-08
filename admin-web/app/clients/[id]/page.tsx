@@ -27,9 +27,9 @@ export default async function ClientDetailPage({ params }: Props) {
         <div>
           <span className="badge">Клиент #{client.id}</span>
           <h2>{client.name ?? "Без имени"}</h2>
-          <p>Карточка клиента, теги, заметки и быстрый переход назад в диалоги.</p>
+          <p>Карточка клиента, внутренние заметки и быстрый переход обратно к переписке.</p>
         </div>
-        <Link className="button" href="/dialogs">
+        <Link className="button button-ghost" href="/dialogs">
           К диалогам
         </Link>
       </header>

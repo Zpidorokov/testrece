@@ -18,10 +18,29 @@ const kindOptions = [
 ];
 
 export function KnowledgeListEditor({ items }: { items: KnowledgeItem[] }) {
+  const groups = items.reduce(
+    (accumulator, item) => {
+      const key = item.kind;
+      accumulator[key] = accumulator[key] ? [...accumulator[key], item] : [item];
+      return accumulator;
+    },
+    {} as Record<string, KnowledgeItem[]>,
+  );
+
   return (
-    <div className="stack">
-      {items.map((item) => (
-        <KnowledgeEditorCard item={item} key={item.id} />
+    <div className="knowledge-groups">
+      {Object.entries(groups).map(([kind, group]) => (
+        <section className="knowledge-group" key={kind}>
+          <div className="knowledge-group-head">
+            <strong>{formatKnowledgeKind(kind)}</strong>
+            <span>{group.length}</span>
+          </div>
+          <div className="stack">
+            {group.map((item) => (
+              <KnowledgeEditorCard item={item} key={item.id} />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   );

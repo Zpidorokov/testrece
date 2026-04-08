@@ -28,6 +28,7 @@ def _summary(dialog: Dialog) -> DialogSummary:
 
 
 def _detail(dialog: Dialog) -> DialogDetail:
+    ai_state = dialog.ai_state_json or {}
     return DialogDetail(
         id=dialog.id,
         client_id=dialog.client_id,
@@ -36,7 +37,12 @@ def _detail(dialog: Dialog) -> DialogDetail:
         assigned_user_id=dialog.assigned_user_id,
         forum_thread_id=dialog.forum_thread_id,
         messages=list(dialog.messages),
-        ai_flags={"can_auto_reply": dialog.mode == "auto"},
+        ai_flags={
+            "can_auto_reply": dialog.mode == "auto",
+            "state": ai_state,
+            "last_ai_action": ai_state.get("last_ai_action"),
+            "offered_slots": ai_state.get("offered_slots", []),
+        },
     )
 
 

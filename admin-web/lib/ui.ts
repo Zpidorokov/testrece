@@ -48,6 +48,26 @@ const knowledgeKindLabels: Record<string, string> = {
   escalation_rule: "Когда звать человека",
 };
 
+const auditActionLabels: Record<string, string> = {
+  client_created: "Создан клиент",
+  dialog_created: "Создан диалог",
+  notification_created: "Создано уведомление",
+  booking_created: "Создана запись",
+  admin_command_requested: "Открыта админ-панель",
+  web_app_data_received: "Получены данные из mini app",
+  ai_dispatch_failed: "Сбой AI-ответа",
+  manual_mode_skip_ai: "AI пропущен из-за ручного режима",
+  takeover: "Диалог забрал сотрудник",
+  return_to_auto: "Диалог вернули AI",
+};
+
+const senderLabels: Record<string, string> = {
+  client: "Клиент",
+  ai: "Ассистент",
+  staff: "Сотрудник",
+  system: "Система",
+};
+
 function fromMap(map: Record<string, string>, value: string) {
   return map[value] ?? value;
 }
@@ -70,4 +90,12 @@ export function formatClientStatus(value: string) {
 
 export function formatKnowledgeKind(value: string) {
   return fromMap(knowledgeKindLabels, value);
+}
+
+export function formatAuditAction(value: string) {
+  return fromMap(auditActionLabels, value);
+}
+
+export function formatSenderType(value: string) {
+  return fromMap(senderLabels, value);
 }

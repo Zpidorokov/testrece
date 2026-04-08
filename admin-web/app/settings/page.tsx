@@ -1,4 +1,5 @@
 import { getAuditLogs, getBranches, getServices, getStaff } from "@/lib/api";
+import { formatAuditAction } from "@/lib/ui";
 
 export default async function SettingsPage() {
   const [services, staff, branches, logs] = await Promise.all([getServices(), getStaff(), getBranches(), getAuditLogs()]);
@@ -37,7 +38,7 @@ export default async function SettingsPage() {
             {logs.length ? (
               logs.slice(0, 10).map((log) => (
                 <article className="message" key={log.id}>
-                  <strong>{log.action}</strong>
+                  <strong>{formatAuditAction(log.action)}</strong>
                   <div>
                     {log.entity_type} #{log.entity_id}
                   </div>

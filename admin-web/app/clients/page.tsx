@@ -17,43 +17,33 @@ export default async function ClientsPage() {
         </div>
       </header>
       <section className="panel">
-        <h3>Список клиентов</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Имя</th>
-              <th>Telegram</th>
-              <th>Статус</th>
-              <th>Телефон</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.length ? (
-              clients.map((client) => (
-                <tr key={client.id}>
-                  <td className="mono" data-label="ID">
-                    #{client.id}
-                  </td>
-                  <td data-label="Имя">
-                    <Link href={`/clients/${client.id}`}>{client.full_name ?? "Без имени"}</Link>
-                  </td>
-                  <td data-label="Telegram">{client.username ? `@${client.username}` : "—"}</td>
-                  <td data-label="Статус">
-                    <StatusPill label={formatClientStatus(client.status)} />
-                  </td>
-                  <td data-label="Телефон">{client.phone ?? "—"}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5}>
-                  <div className="empty-state">Клиенты создаются автоматически при первом сообщении в Telegram Business.</div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="panel-head">
+          <div>
+            <h3>Список клиентов</h3>
+            <p className="panel-subtitle">Карточки собираются автоматически после первого обращения в Telegram.</p>
+          </div>
+        </div>
+        {clients.length ? (
+          <div className="record-list">
+            {clients.map((client) => (
+              <Link className="record-card record-card-link" href={`/clients/${client.id}`} key={client.id}>
+                <div className="record-card-head">
+                  <div>
+                    <div className="record-card-title">{client.full_name ?? "Без имени"}</div>
+                    <div className="record-inline mono">#{client.id}</div>
+                  </div>
+                  <StatusPill label={formatClientStatus(client.status)} />
+                </div>
+                <div className="record-card-meta">
+                  <span>{client.username ? `@${client.username}` : "Без username"}</span>
+                  <span>{client.phone ?? "Телефон не указан"}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">Клиенты создаются автоматически при первом сообщении в Telegram Business.</div>
+        )}
       </section>
     </div>
   );

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models import Client, Dialog, ForumTopic, Message, Notification
+from app.models import Booking, Client, Dialog, ForumTopic, Lead, Message, Notification
 
 
 def test_business_webhook_creates_client_dialog_and_ai_reply(client):
@@ -98,3 +98,103 @@ def test_service_question_uses_catalog_instead_of_location_dump(client):
         assert "маникюр" in reply_text
         assert "педикюр" in reply_text
         assert "аптекарск" not in reply_text
+        assert "хочешь" not in reply_text
+
+
+def test_booking_flow_offers_slots_and_creates_booking(client):
+    updates = [
+        {
+            "update_id": 10,
+            "business_message": {
+                "message_id": 20,
+                "business_connection_id": "bc-2",
+                "chat": {"id": 9100},
+                "from": {"id": 780, "first_name": "Анна", "username": "anna"},
+                "text": "Маникюр",
+            },
+        },
+        {
+            "update_id": 11,
+            "business_message": {
+                "message_id": 21,
+                "business_connection_id": "bc-2",
+                "chat": {"id": 9100},
+                "from": {"id": 780, "first_name": "Анна", "username": "anna"},
+                "text": "давайте",
+            },
+        },
+        {
+            "update_id": 12,
+            "business_message": {
+                "message_id": 22,
+                "business_connection_id": "bc-2",
+                "chat": {"id": 9100},
+                "from": {"id": 780, "first_name": "Анна", "username": "anna"},
+                "text": "да",
+            },
+        },
+    ]
+
+    for update in updates:
+        response = client.post("/webhooks/telegram", headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"}, json=update)
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 780))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        lead = db.scalar(select(Lead).where(Lead.client_id == client_row.id))
+        booking = db.scalar(select(Booking).where(Booking.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+
+        assert booking is not None
+        assert client_row.status == "booked"
+        assert dialog.status == "booked"
+        assert lead is not None and lead.stage == "booked"
+        assert any("запись зафиксировала" in (message.text_content or "").lower() for message in outbound)
+
+
+def test_rude_client_message_does_not_break_tone(client):
+    first = client.post(
+        "/webhooks/telegram",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"},
+        json={
+            "update_id": 40,
+            "business_message": {
+                "message_id": 40,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9300},
+                "from": {"id": 781, "first_name": "Нина", "username": "nina"},
+                "text": "какие услуги есть",
+            },
+        },
+    )
+    second = client.post(
+        "/webhooks/telegram",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test-secret"},
+        json={
+            "update_id": 41,
+            "business_message": {
+                "message_id": 41,
+                "business_connection_id": "bc-4",
+                "chat": {"id": 9300},
+                "from": {"id": 781, "first_name": "Нина", "username": "nina"},
+                "text": "ты че сука так общаешься",
+            },
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    with SessionLocal() as db:
+        client_row = db.scalar(select(Client).where(Client.telegram_user_id == 781))
+        dialog = db.scalar(select(Dialog).where(Dialog.client_id == client_row.id))
+        outbound = db.scalars(
+            select(Message).where(Message.dialog_id == dialog.id, Message.direction == "out").order_by(Message.id.asc())
+        ).all()
+        reply_text = "\n".join(filter(None, (message.text_content for message in outbound))).lower()
+
+        assert "сука" not in reply_text
+        assert "на вы" in reply_text or "буду общаться на вы" in reply_text

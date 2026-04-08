@@ -20,49 +20,41 @@ export default async function BookingsPage() {
       <section className="grid grid-2">
         <article className="panel">
           <h3>Создать запись</h3>
-          <p className="panel-subtitle">Клиент, услуга, мастер и время.</p>
+          <p className="panel-subtitle">Если нужно помочь вручную: выберите клиента, услугу и точное время.</p>
           <CreateBookingForm services={services} staff={staff} branches={branches} />
         </article>
 
         <article className="panel">
-          <h3>Ближайшие записи</h3>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Клиент</th>
-                <th>Услуга</th>
-                <th>Старт</th>
-                <th>Статус</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.length ? (
-                bookings.map((booking) => (
-                  <tr key={booking.id}>
-                    <td className="mono" data-label="ID">
-                      #{booking.id}
-                    </td>
-                    <td data-label="Клиент">#{booking.client_id}</td>
-                    <td data-label="Услуга">{serviceMap.get(booking.service_id) ?? `#${booking.service_id}`}</td>
-                    <td data-label="Старт">{new Date(booking.start_at).toLocaleString("ru-RU")}</td>
-                    <td data-label="Статус">
-                      <StatusPill
-                        label={formatBookingStatus(booking.status)}
-                        tone={booking.status.includes("cancel") ? "danger" : booking.status === "confirmed" ? "success" : "neutral"}
-                      />
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty-state">Записи появятся после создания из Telegram или вручную из панели.</div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className="panel-head">
+            <div>
+              <h3>Ближайшие записи</h3>
+              <p className="panel-subtitle">Все брони, которые уже дошли до внутреннего booking engine.</p>
+            </div>
+          </div>
+          {bookings.length ? (
+            <div className="record-list">
+              {bookings.map((booking) => (
+                <article className="record-card" key={booking.id}>
+                  <div className="record-card-head">
+                    <div>
+                      <div className="record-card-title">{serviceMap.get(booking.service_id) ?? `Услуга #${booking.service_id}`}</div>
+                      <div className="record-inline mono">Бронь #{booking.id}</div>
+                    </div>
+                    <StatusPill
+                      label={formatBookingStatus(booking.status)}
+                      tone={booking.status.includes("cancel") ? "danger" : booking.status === "confirmed" ? "success" : "neutral"}
+                    />
+                  </div>
+                  <div className="record-card-meta">
+                    <span>Клиент #{booking.client_id}</span>
+                    <span>{new Date(booking.start_at).toLocaleString("ru-RU")}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">Записи появятся после создания из Telegram или вручную из панели.</div>
+          )}
         </article>
       </section>
     </div>

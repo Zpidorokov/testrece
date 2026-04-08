@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.core.enums import AirouterDecision, ContentType, DialogMode, MessageDirection, NotificationType, SenderType
+from app.core.enums import AirouterDecision, ClientStatus, ContentType, DialogMode, DialogStatus, LeadStage, MessageDirection, NotificationType, SenderType
 from app.core.settings import Settings
 from app.db.session import SessionLocal
 from app.integrations.telegram import TelegramGateway
-from app.models import Client, Dialog, Message
+from app.models import Client, Dialog, Lead, Message, Service, StaffMember
+from app.schemas.booking import BookingCreateRequest
 from app.schemas.telegram import AIRouterOutput
 from app.services.ai_router import route_ai
 from app.services.audit import log_audit_event
 from app.services.crm import record_message
 from app.services.notifications import create_notification
+from app.services.scheduling import create_booking
 from app.services.topic_sync import mirror_to_topic
 
 
@@ -140,17 +144,17 @@ async def _typing_pulse(
 
 
 def _collect_pending_messages(dialog: Dialog) -> list[Message]:
-    ordered = sorted(dialog.messages, key=lambda item: item.created_at)
-    last_outbound_at: Optional[datetime] = None
+    ordered = sorted(dialog.messages, key=lambda item: item.id)
+    last_outbound_id: Optional[int] = None
     for message in ordered:
         if message.direction == MessageDirection.OUT.value:
-            last_outbound_at = message.created_at
+            last_outbound_id = message.id
 
     pending: list[Message] = []
     for message in ordered:
         if message.direction != MessageDirection.IN.value or message.sender_type != SenderType.CLIENT.value:
             continue
-        if last_outbound_at and message.created_at <= last_outbound_at:
+        if last_outbound_id and message.id <= last_outbound_id:
             continue
         pending.append(message)
     return pending
@@ -164,6 +168,188 @@ def _merge_pending_messages(messages: list[Message]) -> tuple[str, str]:
     if not parts:
         parts = ["Клиент отправил несколько сообщений без текста."]
     return "\n".join(parts), content_type
+
+
+def _merge_ai_state(dialog: Dialog, patch: Optional[dict]) -> dict:
+    state = dict(dialog.ai_state_json or {})
+    if patch:
+        state.update(patch)
+    dialog.ai_state_json = state
+    return state
+
+
+def _latest_lead(db: Session, client_id: int) -> Optional[Lead]:
+    return db.scalar(select(Lead).where(Lead.client_id == client_id).order_by(desc(Lead.created_at)).limit(1))
+
+
+def _apply_status_patch(db: Session, dialog: Dialog, client: Client, patch: Optional[dict]) -> None:
+    if not patch:
+        return
+    dialog_status = patch.get("dialog_status")
+    client_status = patch.get("client_status")
+    lead_stage = patch.get("lead_stage")
+    lead_service_id = patch.get("lead_service_id")
+
+    if dialog_status:
+        dialog.status = dialog_status
+        db.add(dialog)
+    if client_status:
+        client.status = client_status
+        db.add(client)
+    if lead_stage or lead_service_id:
+        lead = _latest_lead(db, client.id)
+        if lead:
+            if lead_stage:
+                lead.stage = lead_stage
+            if lead_service_id:
+                lead.first_interest_service_id = lead_service_id
+            db.add(lead)
+
+
+def _format_slot_label(slot_start: datetime, staff: Optional[StaffMember]) -> str:
+    month_names = {
+        1: "января",
+        2: "февраля",
+        3: "марта",
+        4: "апреля",
+        5: "мая",
+        6: "июня",
+        7: "июля",
+        8: "августа",
+        9: "сентября",
+        10: "октября",
+        11: "ноября",
+        12: "декабря",
+    }
+    date_part = f"{slot_start.day} {month_names[slot_start.month]}"
+    time_part = slot_start.strftime("%H:%M")
+    if staff:
+        return f"{date_part} в {time_part}, мастер {staff.full_name}"
+    return f"{date_part} в {time_part}"
+
+
+def _reply_hash(messages: list[str]) -> str:
+    normalized = "\n".join(message.strip().lower() for message in messages if message.strip())
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+
+
+def _parse_selected_slot(item: Optional[dict]) -> Optional[dict]:
+    if not item or "start_at" not in item:
+        return None
+    try:
+        return {
+            "start_at": datetime.fromisoformat(item["start_at"]),
+            "staff_id": item.get("staff_id"),
+            "branch_id": item.get("branch_id"),
+        }
+    except Exception:
+        return None
+
+
+def _finalize_booking_reply(
+    db: Session,
+    *,
+    dialog: Dialog,
+    client: Client,
+    ai_output: AIRouterOutput,
+) -> AIRouterOutput:
+    slot = _parse_selected_slot(ai_output.extracted_entities.get("selected_slot"))
+    service_id = ai_output.extracted_entities.get("selected_service_id")
+    if slot is None or service_id is None:
+        ai_output.reply.messages = ["Чтобы зафиксировать запись без ошибки, уточните, пожалуйста, удобный день или выберите один из предложенных вариантов."]
+        ai_output.reply.split = False
+        ai_output.next_action = "request_time_preference"
+        ai_output.extracted_entities["state_patch"] = {
+            **(ai_output.extracted_entities.get("state_patch") or {}),
+            "last_ai_action": "request_time_preference",
+        }
+        return ai_output
+
+    service = db.get(Service, service_id)
+    staff = db.get(StaffMember, slot["staff_id"]) if slot.get("staff_id") else None
+    if not service:
+        ai_output.reply.messages = ["Не получилось корректно определить услугу для записи. Напишите, пожалуйста, еще раз, что хотите сделать, и я быстро соберу запись заново."]
+        ai_output.reply.split = False
+        ai_output.next_action = "clarify_service"
+        return ai_output
+
+    try:
+        booking = create_booking(
+            db,
+            BookingCreateRequest(
+                client_id=client.id,
+                service_id=service.id,
+                staff_id=slot.get("staff_id"),
+                branch_id=slot.get("branch_id"),
+                start_at=slot["start_at"],
+                comment="Создано авто-ассистентом в Telegram",
+            ),
+        )
+    except ValueError:
+        ai_output.reply.messages = [
+            "Пока фиксировала запись, это окно уже заняли. Могу сразу подобрать 2-3 новых варианта — напишите, пожалуйста, удобный день или просто «да»."
+        ]
+        ai_output.reply.split = False
+        ai_output.next_action = "request_time_preference"
+        ai_output.extracted_entities["state_patch"] = {
+            **(ai_output.extracted_entities.get("state_patch") or {}),
+            "offered_slots": [],
+            "last_ai_action": "request_time_preference",
+        }
+        return ai_output
+
+    dialog.status = DialogStatus.BOOKED.value
+    client.status = ClientStatus.BOOKED.value
+    db.add(dialog)
+    db.add(client)
+    lead = _latest_lead(db, client.id)
+    if lead:
+        lead.stage = LeadStage.BOOKED.value
+        lead.first_interest_service_id = service.id
+        db.add(lead)
+
+    create_notification(
+        db,
+        notification_type=NotificationType.NEW_BOOKING.value,
+        dialog_id=dialog.id,
+        booking_id=booking.id,
+        payload={"client_id": client.id, "service_id": service.id, "start_at": booking.start_at.isoformat()},
+    )
+
+    ai_output.reply.messages = [
+        (
+            '<tg-emoji emoji-id="5870633910337015697">✅</tg-emoji> '
+            f"Запись зафиксировала: {service.name}, {_format_slot_label(booking.start_at, staff)}."
+        ),
+        "Если захотите, я могу сразу подсказать, как подготовиться к визиту или помочь с переносом.",
+    ]
+    ai_output.reply.split = True
+    ai_output.next_action = "booking_created"
+    ai_output.extracted_entities["state_patch"] = {
+        **(ai_output.extracted_entities.get("state_patch") or {}),
+        "selected_service_id": service.id,
+        "offered_slots": [],
+        "last_ai_action": "booking_created",
+        "booked_booking_id": booking.id,
+        "booked_start_at": booking.start_at.isoformat(),
+    }
+    ai_output.extracted_entities["status_patch"] = {
+        "dialog_status": DialogStatus.BOOKED.value,
+        "client_status": ClientStatus.BOOKED.value,
+        "lead_stage": LeadStage.BOOKED.value,
+        "lead_service_id": service.id,
+    }
+    return ai_output
+
+
+def _apply_ai_output(db: Session, dialog: Dialog, client: Client, ai_output: AIRouterOutput) -> AIRouterOutput:
+    _merge_ai_state(dialog, ai_output.extracted_entities.get("state_patch"))
+    _apply_status_patch(db, dialog, client, ai_output.extracted_entities.get("status_patch"))
+    if ai_output.next_action == "book_slot":
+        ai_output = _finalize_booking_reply(db, dialog=dialog, client=client, ai_output=ai_output)
+        _merge_ai_state(dialog, ai_output.extracted_entities.get("state_patch"))
+        _apply_status_patch(db, dialog, client, ai_output.extracted_entities.get("status_patch"))
+    return ai_output
 
 
 async def process_dialog_auto_reply(
@@ -199,6 +385,7 @@ async def process_dialog_auto_reply(
             "batched_message_ids": [message.id for message in pending_messages],
         },
     )
+    ai_output = _apply_ai_output(db, dialog, dialog.client, ai_output)
 
     if ai_output.should_escalate or ai_output.decision == AirouterDecision.ESCALATE.value:
         dialog.mode = DialogMode.MANUAL.value
@@ -247,7 +434,7 @@ async def send_ai_messages(
     chat_id: int,
     ai_output: AIRouterOutput,
 ) -> None:
-    for part in ai_output.reply.messages:
+    for index, part in enumerate(ai_output.reply.messages):
         await gateway.send_chat_action(
             chat_id=chat_id,
             action="typing",
@@ -277,3 +464,10 @@ async def send_ai_messages(
             text=part,
             prefix='<tg-emoji emoji-id="6030400221232501136">🤖</tg-emoji> AI',
         )
+        if index < len(ai_output.reply.messages) - 1:
+            await asyncio.sleep(1.0)
+    state = dict(dialog.ai_state_json or {})
+    state["last_reply_hash"] = _reply_hash(ai_output.reply.messages)
+    state["last_ai_action"] = ai_output.extracted_entities.get("state_patch", {}).get("last_ai_action", ai_output.next_action)
+    dialog.ai_state_json = state
+    db.add(dialog)

@@ -171,6 +171,7 @@ class Dialog(TimestampMixin, Base):
     assigned_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     forum_topic_id: Mapped[Optional[int]] = mapped_column(ForeignKey("forum_topics.id"))
     forum_thread_id: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
+    ai_state_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
     client: Mapped["Client"] = relationship(back_populates="dialogs")
     messages: Mapped[list["Message"]] = relationship(back_populates="dialog", cascade="all, delete-orphan")

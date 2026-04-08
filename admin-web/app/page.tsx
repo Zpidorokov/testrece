@@ -30,46 +30,40 @@ export default async function DashboardPage() {
       </section>
 
       <section className="panel">
-        <h3>Активные диалоги</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Клиент</th>
-              <th>Статус</th>
-              <th>Режим</th>
-              <th>Последнее сообщение</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dialogs.length ? (
-              dialogs.slice(0, 8).map((dialog) => (
-                <tr key={dialog.id}>
-                  <td className="mono" data-label="ID">
-                    #{dialog.id}
-                  </td>
-                  <td data-label="Клиент">
-                    <Link href={`/clients/${dialog.client_id}`}>{dialog.client_name ?? `Клиент #${dialog.client_id}`}</Link>
-                  </td>
-                  <td data-label="Статус">
-                    <StatusPill
-                      label={formatDialogStatus(dialog.status)}
-                      tone={dialog.status === "manual" || dialog.status === "escalated" ? "warning" : "neutral"}
-                    />
-                  </td>
-                  <td data-label="Режим">{formatDialogMode(dialog.mode)}</td>
-                  <td data-label="Последнее">{dialog.last_message ?? "Пока без сообщений"}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5}>
-                  <div className="empty-state">Пока нет данных. Как только начнут приходить диалоги, таблица заполнится автоматически.</div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="panel-head">
+          <div>
+            <h3>Активные диалоги</h3>
+            <p className="panel-subtitle">Последние обращения, которые сейчас в работе.</p>
+          </div>
+          <Link className="button button-ghost" href="/dialogs">
+            Все диалоги
+          </Link>
+        </div>
+        {dialogs.length ? (
+          <div className="record-list compact-list">
+            {dialogs.slice(0, 8).map((dialog) => (
+              <Link className="record-card record-card-link" href={`/dialogs?dialog=${dialog.id}`} key={dialog.id}>
+                <div className="record-card-head">
+                  <div>
+                    <div className="record-card-title">{dialog.client_name ?? `Клиент #${dialog.client_id}`}</div>
+                    <div className="record-inline mono">#{dialog.id}</div>
+                  </div>
+                  <StatusPill
+                    label={formatDialogStatus(dialog.status)}
+                    tone={dialog.status === "manual" || dialog.status === "escalated" ? "warning" : "neutral"}
+                  />
+                </div>
+                <div className="record-card-meta">
+                  <span>{formatDialogMode(dialog.mode)}</span>
+                  <span>{dialog.last_message_at ? new Date(dialog.last_message_at).toLocaleString("ru-RU") : "Без ответа"}</span>
+                </div>
+                <p className="record-card-copy">{dialog.last_message ?? "Пока без сообщений"}</p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">Пока нет данных. Как только начнут приходить диалоги, список заполнится автоматически.</div>
+        )}
       </section>
     </div>
   );

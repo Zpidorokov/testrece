@@ -27,7 +27,7 @@ get_settings.cache_clear()
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
-from app.services.bootstrap import ensure_default_roles
+from app.services.bootstrap import ensure_default_roles, ensure_demo_catalog, ensure_demo_knowledge
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +38,9 @@ def reset_db():
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         ensure_default_roles(db)
+        ensure_demo_catalog(db)
+        ensure_demo_knowledge(db)
+        db.commit()
     yield
     engine.dispose()
     if TEST_DB_PATH.exists():

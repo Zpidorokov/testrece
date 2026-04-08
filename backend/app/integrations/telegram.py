@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -91,6 +92,9 @@ class TelegramGateway:
         return await self.send_bot_message(chat_id=chat_id, message_thread_id=thread_id, text=text)
 
     async def send_admin_entrypoint(self, chat_id: int) -> Dict[str, Any]:
+        parsed = urlparse(self.settings.admin_web_url)
+        normalized_path = "/" if parsed.path in {"", "/", "/admin"} else parsed.path.rstrip("/")
+        launch_url = urlunparse(parsed._replace(path=normalized_path))
         return await self.send_bot_message(
             chat_id=chat_id,
             text=(
@@ -103,7 +107,7 @@ class TelegramGateway:
                     [
                         {
                             "text": "Открыть панель",
-                            "web_app": {"url": self.settings.admin_web_url},
+                            "web_app": {"url": launch_url},
                             "icon_custom_emoji_id": "5870982283724328568",
                         }
                     ]

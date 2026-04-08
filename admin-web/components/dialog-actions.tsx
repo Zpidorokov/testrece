@@ -43,7 +43,7 @@ export function DialogActions({ dialogId, mode }: Props) {
       <div className="action-row">
         {mode === "manual" ? (
           <button className="button button-secondary" disabled={busy} onClick={() => void call(`/api/dialogs/${dialogId}/return-to-auto`)}>
-            Вернуть AI
+            Вернуть авто-режим
           </button>
         ) : (
           <button
@@ -57,7 +57,7 @@ export function DialogActions({ dialogId, mode }: Props) {
       </div>
       <textarea
         className="textarea"
-        placeholder="Написать клиенту вручную"
+        placeholder="Сообщение клиенту от сотрудника"
         rows={4}
         value={text}
         onChange={(event) => setText(event.target.value)}

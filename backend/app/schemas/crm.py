@@ -106,4 +106,3 @@ class TakeoverRequest(BaseModel):
 class SendDialogMessageRequest(BaseModel):
     text: str
     split_mode: str = "single"
-

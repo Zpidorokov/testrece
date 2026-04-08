@@ -110,7 +110,10 @@ def record_message(
         payload_json=payload_json or {},
     )
     db.add(message)
-    dialog.status = DialogStatus.ACTIVE.value if dialog.mode == DialogMode.AUTO.value else DialogStatus.MANUAL.value
+    if dialog.mode == DialogMode.MANUAL.value:
+        dialog.status = DialogStatus.MANUAL.value
+    elif dialog.status not in {DialogStatus.WAITING_SLOT_SELECTION.value, DialogStatus.BOOKED.value}:
+        dialog.status = DialogStatus.ACTIVE.value
     db.add(dialog)
     db.flush()
     return message

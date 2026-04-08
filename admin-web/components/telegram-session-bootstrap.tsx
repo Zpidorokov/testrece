@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+type Insets = {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+};
+
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
@@ -14,6 +21,11 @@ type TelegramWindow = Window & {
         };
       };
       themeParams?: Record<string, string>;
+      safeAreaInset?: Insets;
+      contentSafeAreaInset?: Insets;
+      viewportHeight?: number;
+      isExpanded?: boolean;
+      isFullscreen?: boolean;
       ready?: () => void;
       expand?: () => void;
       requestFullscreen?: () => void;
@@ -22,13 +34,18 @@ type TelegramWindow = Window & {
       setHeaderColor?: (color: string) => void;
       setBackgroundColor?: (color: string) => void;
       setBottomBarColor?: (color: string) => void;
-      onEvent?: (eventType: string, handler: (payload?: unknown) => void) => void;
-      offEvent?: (eventType: string, handler: (payload?: unknown) => void) => void;
-      viewportHeight?: number;
-      isExpanded?: boolean;
+      onEvent?: (eventType: string, handler: () => void) => void;
+      offEvent?: (eventType: string, handler: () => void) => void;
     };
   };
 };
+
+function applyInsets(root: HTMLElement, prefix: string, insets?: Insets) {
+  root.style.setProperty(`${prefix}-top`, `${insets?.top ?? 0}px`);
+  root.style.setProperty(`${prefix}-right`, `${insets?.right ?? 0}px`);
+  root.style.setProperty(`${prefix}-bottom`, `${insets?.bottom ?? 0}px`);
+  root.style.setProperty(`${prefix}-left`, `${insets?.left ?? 0}px`);
+}
 
 export function TelegramSessionBootstrap() {
   const router = useRouter();
@@ -42,8 +59,26 @@ export function TelegramSessionBootstrap() {
     }
     bootstrappedRef.current = true;
 
-    const telegram = (window as TelegramWindow).Telegram?.WebApp;
     const root = document.documentElement;
+    const telegram = (window as TelegramWindow).Telegram?.WebApp;
+    const sessionCacheKey = "botreceptionist:session:init";
+
+    const syncViewport = () => {
+      const height = telegram?.viewportHeight ? `${telegram.viewportHeight}px` : `${window.innerHeight}px`;
+      root.style.setProperty("--app-height", height);
+      root.dataset.telegramFullscreen = telegram?.isFullscreen ? "true" : "false";
+    };
+
+    const syncInsets = () => {
+      applyInsets(root, "--tg-safe-area-inset", telegram?.safeAreaInset);
+      applyInsets(root, "--tg-content-safe-area-inset", telegram?.contentSafeAreaInset ?? telegram?.safeAreaInset);
+    };
+
+    const syncAll = () => {
+      syncViewport();
+      syncInsets();
+    };
+
     telegram?.ready?.();
     telegram?.expand?.();
     telegram?.disableVerticalSwipes?.();
@@ -51,35 +86,47 @@ export function TelegramSessionBootstrap() {
     telegram?.setHeaderColor?.("bg_color");
     telegram?.setBackgroundColor?.("bg_color");
     telegram?.setBottomBarColor?.("bg_color");
-    const syncViewport = () => {
-      const height = telegram?.viewportHeight ? `${telegram.viewportHeight}px` : `${window.innerHeight}px`;
-      root.style.setProperty("--app-height", height);
-      document.body.style.minHeight = height;
-    };
-    syncViewport();
+    syncAll();
 
     const handleFullscreenFailed = () => {
       root.dataset.fullscreenFailed = "true";
     };
 
-    telegram?.onEvent?.("viewportChanged", syncViewport);
-    telegram?.onEvent?.("fullscreenChanged", syncViewport);
+    telegram?.onEvent?.("viewportChanged", syncAll);
+    telegram?.onEvent?.("fullscreenChanged", syncAll);
     telegram?.onEvent?.("fullscreenFailed", handleFullscreenFailed);
+    telegram?.onEvent?.("safeAreaChanged", syncInsets);
+    telegram?.onEvent?.("contentSafeAreaChanged", syncInsets);
 
     window.setTimeout(() => {
       telegram?.expand?.();
-      telegram?.requestFullscreen?.();
-      syncViewport();
+      if (!telegram?.isFullscreen) {
+        telegram?.requestFullscreen?.();
+      }
+      syncAll();
     }, 120);
 
     root.dataset.telegramMiniApp = telegram ? "true" : "false";
+
     const initData = telegram?.initData;
     const telegramUserId = telegram?.initDataUnsafe?.user?.id;
     if (!initData || !telegramUserId) {
       return () => {
-        telegram?.offEvent?.("viewportChanged", syncViewport);
-        telegram?.offEvent?.("fullscreenChanged", syncViewport);
+        telegram?.offEvent?.("viewportChanged", syncAll);
+        telegram?.offEvent?.("fullscreenChanged", syncAll);
         telegram?.offEvent?.("fullscreenFailed", handleFullscreenFailed);
+        telegram?.offEvent?.("safeAreaChanged", syncInsets);
+        telegram?.offEvent?.("contentSafeAreaChanged", syncInsets);
+      };
+    }
+
+    if (sessionStorage.getItem(sessionCacheKey) === initData) {
+      return () => {
+        telegram?.offEvent?.("viewportChanged", syncAll);
+        telegram?.offEvent?.("fullscreenChanged", syncAll);
+        telegram?.offEvent?.("fullscreenFailed", handleFullscreenFailed);
+        telegram?.offEvent?.("safeAreaChanged", syncInsets);
+        telegram?.offEvent?.("contentSafeAreaChanged", syncInsets);
       };
     }
 
@@ -101,15 +148,18 @@ export function TelegramSessionBootstrap() {
         return;
       }
 
+      sessionStorage.setItem(sessionCacheKey, initData);
       startTransition(() => {
         router.refresh();
       });
     })();
 
     return () => {
-      telegram?.offEvent?.("viewportChanged", syncViewport);
-      telegram?.offEvent?.("fullscreenChanged", syncViewport);
+      telegram?.offEvent?.("viewportChanged", syncAll);
+      telegram?.offEvent?.("fullscreenChanged", syncAll);
       telegram?.offEvent?.("fullscreenFailed", handleFullscreenFailed);
+      telegram?.offEvent?.("safeAreaChanged", syncInsets);
+      telegram?.offEvent?.("contentSafeAreaChanged", syncInsets);
     };
   }, [router]);
 

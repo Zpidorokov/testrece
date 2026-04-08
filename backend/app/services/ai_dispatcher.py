@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import hashlib
+import logging
 import re
 from datetime import datetime
 from typing import Optional
@@ -28,6 +29,7 @@ from app.services.topic_sync import mirror_to_topic
 _dialog_generations: dict[int, int] = {}
 _dialog_tasks: dict[int, asyncio.Task[None]] = {}
 _TG_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="[^"]+">.*?</tg-emoji>', re.DOTALL)
+logger = logging.getLogger(__name__)
 
 
 def schedule_dialog_ai_response(
@@ -91,6 +93,7 @@ async def _run_dialog_ai_response(
     except asyncio.CancelledError:
         raise
     except Exception as exc:
+        logger.exception("AI dispatch failed for dialog %s", dialog_id)
         with SessionLocal() as db:
             log_audit_event(
                 db,

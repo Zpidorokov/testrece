@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models import Booking, Client, Dialog, ForumTopic, Lead, Message, Notification
 from app.schemas.telegram import AIRouterOutput, AIRouterReply
 from app.services.ai_dispatcher import _render_outbound_parts
+from app.services.scheduling import _align_datetime
 
 
 def test_business_webhook_creates_client_dialog_and_ai_reply(client):
@@ -255,3 +258,13 @@ def test_outbound_messages_are_joined_and_html_safe():
     assert len(parts) == 1
     assert '<tg-emoji emoji-id="5870764288364252592">🙂</tg-emoji>' in parts[0]
     assert "&lt; 5000 &amp; можно сегодня" in parts[0]
+
+
+def test_align_datetime_handles_naive_and_aware_values():
+    reference = datetime(2026, 4, 8, 12, 0, tzinfo=timezone.utc)
+    value = datetime(2026, 4, 8, 15, 30)
+
+    aligned = _align_datetime(reference, value)
+
+    assert aligned.tzinfo == timezone.utc
+    assert aligned.hour == 15

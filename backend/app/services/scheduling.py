@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy import and_, or_, select
@@ -13,6 +13,16 @@ from app.services.audit import log_audit_event
 
 
 BOOKING_BUFFER_MINUTES = 15
+
+
+def _align_datetime(reference: datetime, value: datetime) -> datetime:
+    if reference.tzinfo is None and value.tzinfo is None:
+        return value
+    if reference.tzinfo is not None and value.tzinfo is None:
+        return value.replace(tzinfo=reference.tzinfo)
+    if reference.tzinfo is None and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(reference.tzinfo)
 
 
 def _booking_end(start_at: datetime, duration_min: int) -> datetime:
@@ -64,8 +74,10 @@ def list_slots(
             if not staff or staff.branch_id != branch_id:
                 continue
 
-        cursor = max(schedule.start_at, date_from)
-        end_boundary = min(schedule.end_at, date_to)
+        range_start = _align_datetime(schedule.start_at, date_from)
+        range_end = _align_datetime(schedule.end_at, date_to)
+        cursor = max(schedule.start_at, range_start)
+        end_boundary = min(schedule.end_at, range_end)
         while cursor + timedelta(minutes=service.duration_min) <= end_boundary:
             slot_end = _booking_end(cursor, service.duration_min)
             padded_start = cursor - timedelta(minutes=BOOKING_BUFFER_MINUTES)
@@ -236,4 +248,3 @@ def block_staff_interval(db: Session, staff_id: int, payload: StaffBlockRequest)
     db.add(item)
     db.flush()
     return item
-
